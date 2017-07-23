@@ -1,0 +1,5 @@
+TRANSPORT_DRIVERS = (
+	TRANSPORT_WSGI, TRANSPORT_WEBSOCKET,
+) = (
+	'wsgi', 'websocket'	
+)
