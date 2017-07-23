@@ -1,7 +1,5 @@
 import abc
-
 import six
-
 
 def _config_options():
 	return [

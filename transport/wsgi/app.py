@@ -1,6 +1,7 @@
 from oslo_config import cfg
 from oslo_log import log
 import bootstrap
+import service
 #from transport.wsgi import driver
 #from storage import controller
 
@@ -12,6 +13,8 @@ log.setup(conf, 'pythontest')
 
 boot = bootstrap.Bootstrap(conf)
 conf.drivers.transport = 'wsgi'
+#print('Invoke BOSS list-endpoint interval is %d' % conf.periodic_task_interval)
 
 application = boot.transport()
 app = application.app
+#service.Service(conf)
