@@ -18,3 +18,5 @@ conf.drivers.transport = 'wsgi'
 application = boot.transport()
 app = application.app
 #service.Service(conf)
+def periodic_task():
+	pass
