@@ -1,6 +1,7 @@
 from oslo_config import cfg
 from oslo_log import log
 import bootstrap
+import os
 import service
 #from transport.wsgi import driver
 #from storage import controller
@@ -13,10 +14,21 @@ log.setup(conf, 'pythontest')
 
 boot = bootstrap.Bootstrap(conf)
 conf.drivers.transport = 'wsgi'
-#print('Invoke BOSS list-endpoint interval is %d' % conf.periodic_task_interval)
-
 application = boot.transport()
 app = application.app
-#service.Service(conf)
-def periodic_task():
-	pass
+
+print('Invoke BOSS list-endpoint interval is %d' % conf.periodic_task_interval)
+periodic_task = service.Periodic_Task(conf, boot._storage)
+import time, threading
+def run_periodic_task():
+	threading.Thread.daemon = True
+	print('[{0}][{1}]periodic is called!'.format(time.ctime(), os.getpid()))
+	periodic_task.invoke_boss_endpoint_list()
+	periodic_task.contrast_to_local_db()
+	interval = conf.periodic_task_interval
+	if conf.periodic_task_interval is None:
+		interval = 60*60*24
+	threading.Timer(interval, run_periodic_task).start()
+run_periodic_task()
+
+
