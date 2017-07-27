@@ -3,6 +3,7 @@ from stevedore import driver
 from oslo_serialization import jsonutils
 from oslo_log import log
 from common import errors
+import hashlib
 
 LOG = log.getLogger(__name__)
 
@@ -31,3 +32,8 @@ def json_decode(binary):
 
 def to_json(obj):
 	return json.dumps(obj, ensure_ascii=False)
+
+def md5sum(code_str):
+	hashmd5 = hashlib.md5()
+	hashmd5.update(code_str)
+	return hashmd5.hexdigest()

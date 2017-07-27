@@ -69,7 +69,7 @@ CREATE TABLE `Ce_total` (
   `work_mode` varchar(64) NOT NULL,
   `pe_code` varchar(64) NOT NULL,
   `ce_table_md5sum` varchar(32) NOT NULL,
-  `ce_column_md5sum` varchar(32) NOT NULL,
+  `ce_row_md5sum` varchar(32) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -187,7 +187,6 @@ CREATE TABLE `Pe_total` (
   `host_work_status` varchar(64) NOT NULL,
   `host_ip_address` varchar(64) NOT NULL,
   `node_code` varchar(64) NOT NULL,
-  `isp` varchar(64) NOT NULL,
   `pe_code` varchar(64) NOT NULL,
   `pe_type` varchar(64) NOT NULL,
   `pe_work_status` varchar(64) NOT NULL,
@@ -199,7 +198,8 @@ CREATE TABLE `Pe_total` (
   `pe_vpn_access_port` int(11) NOT NULL,
   `virtual_network_number` int(11) NOT NULL,
   `pe_table_md5sum` varchar(32) NOT NULL,
-  `pe_column_md5sum` varchar(32) NOT NULL,
+  `host_code` varchar(64) NOT NULL,
+  `pe_row_md5sum` varchar(32) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -222,4 +222,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2017-07-26 18:26:22
+-- Dump completed on 2017-07-27 18:38:33

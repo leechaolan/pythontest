@@ -24,7 +24,8 @@ def run_periodic_task():
 	threading.Thread.daemon = True
 	print('[{0}][{1}]periodic is called!'.format(time.ctime(), os.getpid()))
 	periodic_task.invoke_boss_endpoint_list()
-	periodic_task.contrast_to_local_db()
+	periodic_task.format_pe_list_result()
+	periodic_task.pe_contrast_to_local_db()
 	interval = conf.periodic_task_interval
 	if conf.periodic_task_interval is None:
 		interval = 60*60*24
