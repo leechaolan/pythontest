@@ -50,7 +50,7 @@ class Periodic_Task(object):
 		LOG.debug(u'begin contrast between local db and result from invoke BOSS list endpoint')
 		list_result_decode = jsonutils.loads(self.list_result)
 		self._list_result_decode = list_result_decode
-		print self._list_result_decode
+		#print self._list_result_decode
 
 		node_count = len(self._list_result_decode['data_list'])
 		node_list = self._list_result_decode['data_list']
@@ -90,9 +90,6 @@ class Periodic_Task(object):
 						pe_row_dict['virtual_network_number'] = k['virtual_network_number']
 						row_lst.append(pe_row_dict)
 		print '\n'
-		print '\n'
-		print '\n'
-		print '\n'
 		print row_lst
 		for i in row_lst:
 			md5str = i['node_code'] +                 \
@@ -122,7 +119,8 @@ class Periodic_Task(object):
 		self._row_list = row_lst		
 
 	def pe_contrast_to_local_db(self):
-		select_fields = [tables.Pe_total.c.pe_table_md5sum,
+		select_fields = [tables.Pe_total.c.id,
+		                 tables.Pe_total.c.pe_table_md5sum,
 		                 tables.Pe_total.c.pe_table_md5sum,
 		                 tables.Pe_total.c.host_code,
 		                 tables.Pe_total.c.host_type,
@@ -140,26 +138,86 @@ class Periodic_Task(object):
 		                 tables.Pe_total.c.pe_vpn_access_port,
 		                 tables.Pe_total.c.virtual_network_number,
 		                ]
-		sel = sa.sql.select(select_fields)
-		result = self._storage_controller.run(sel)
-		if result[0]['pe_table_md5sum'] == self._row_list[0]['pe_table_md5sum']:
-			return True
-
-		for count, i in enumerate(result):
-				if i['pe_table_md5sum'] != self._row_list[count]['pe_row_md5sum']:
-					self._row_list[count]['is_diff'] = 'True'
-		return False
-	
-	def handle_row_md5sum_diff(self);
-		for i in self._row_list:
-			if i['is_diff'] is 'True':
-				select_field = []
-				
-		pass
-					
-				
 
 		
+		sel = sa.sql.select([func.count()]).select_from(tables.Pe_total)
+		result = self._storage_controller.run(sel)
+		self._selected_pe_count = int(result.fetchone()[0])
+		self._listed_pe_count = len(self._row_list)
 
+		sel = sa.sql.select(select_fields)
+		result = self._storage_controller.run(sel)
+		# just compare the 'table md5sum' value.
+		#if it is different that means Pe count is different 
+		#here don't need to consider detail operate because Pe already configed before launch
+		for i, v in enumerate(result):
+			if v['pe_table_md5sum'] == self._row_list[i]['pe_table_md5sum']:
+				return True
+				
+		sel = sa.sql.select(select_fields)
+		result = self._storage_controller.run(sel)
+		sel_md5_lst = []
+		lis_md5_lst = []
+		for i in result:
+			sel_md5_lst.append(i['pe_row_md5sum'])
 
+		for j in self._row_list:
+			lis_md5_lst.append(j['pe_row_md5sum'])
+		
+		#print sel_md5_lst
+		#print lis_md5_lst
 
+		for i in sel_md5_lst:
+			if i not in lis_md5_lst:
+				sel = sa.sql.select([tables.Pe_total.c.pe_code])
+				result = self._storage_controller.run(sel)
+				pe_code = result.fetchone()['pe_code']
+				de = tables.Pe_total.delete().where(tables.Pe_total.pe_row_md5sum == i)
+				self._storage_controller.run(de)
+				de = tables.Pe.delete().where(tables.Pe.pe_code == pe_code)
+				self._storage_controller.run(de)
+
+		for i in lis_md5_lst:
+			if i not in sel_md5_lst:
+				for j in self._row_list:
+					if j['pe_row_md5sum'] == i:
+						print j['host_code']
+						sel = sa.sql.select([tables.Host.c.host_id]).where(tables.Host.c.host_code == j['host_code'])
+						result = self._storage_controller.run(sel)
+						host_id = None
+						for i in result:
+							host_id = i['host_id']
+						print host_id
+						ins = sa.sql.expression.insert(tables.Pe).values(host_id=host_id,
+						#ins = tables.Pe.insert().values(host_id=host_id,
+												        pe_code =j['pe_code'],
+														pe_type=j['pe_type'],
+														pe_work_status=j['pe_work_status'],
+														pe_default_port_ip=j['pe_default_port_ip'],
+														pe_vlan_port_ip=j['pe_vlan_port_ip'],
+														pe_vpn_server_ip=j['pe_vpn_server_ip'],
+														pe_vpn_ip_range_start=j['pe_vpn_ip_range_start'],
+														pe_vpn_ip_range_end=j['pe_vpn_ip_range_end'],
+														pe_vpn_access_port=j['pe_vpn_access_port'],
+														virtual_network_number=j['virtual_network_number'])
+						self._storage_controller.run(ins)
+						ins = sa.sql.expression.insert(tables.Pe_total).values(pe_row_md5sum=j['pe_row_md5sum'],
+						#ins = tables.Pe_total.insert().values(pe_row_md5sum=j['pe_row_md5sum'],
+								                              pe_table_md5sum=j['pe_table_md5sum'],
+															  host_code=j['host_code'],
+															  host_type=j['host_type'],
+															  host_work_status=j['host_work_status'],
+															  host_ip_address=j['host_ip_address'],
+															  node_code=j['node_code'],
+															  pe_code=j['pe_code'],
+															  pe_type=j['pe_type'],
+															  pe_work_status=j['pe_work_status'],
+															  pe_default_port_ip=j['pe_default_port_ip'],
+															  pe_vlan_port_ip=j['pe_vlan_port_ip'],
+															  pe_vpn_server_ip=j['pe_vpn_server_ip'],
+															  pe_vpn_ip_range_start=j['pe_vpn_ip_range_start'],
+															  pe_vpn_ip_range_end=j['pe_vpn_ip_range_end'],
+															  pe_vpn_access_port=j['pe_vpn_access_port'],
+															  virtual_network_number=j['virtual_network_number'])
+						self._storage_controller.run(ins)
+		return False
