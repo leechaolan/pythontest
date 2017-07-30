@@ -26,6 +26,13 @@ class Business(ControllerBase):
 	_list = abc.abstractmethod(lambda x: None)
 
 @six.add_metaclass(abc.ABCMeta)
+class CfgNotify(ControllerBase):
+
+	def list(self, project_id=None):
+		return self._list(project_id)
+	_list = abc.abstractmethod(lambda x: None)
+
+@six.add_metaclass(abc.ABCMeta)
 class DriverBase(object):
 
 	def __init__(self, conf):
@@ -40,4 +47,8 @@ class ControlDriverBase(DriverBase):
 
 	@abc.abstractproperty
 	def business_controller(self):
+		raise NotImplementedError
+	
+	@abc.abstractproperty
+	def cfg_notify_controller(self):
 		raise NotImplementedError

@@ -48,3 +48,7 @@ class ControlDriver(storage.ControlDriverBase):
 	def business_controller(self):
 		controller = con.BusinessController(self)
 		return controller
+
+	@property
+	def cfg_notify_controller(self):
+		controller = con.CfgNotifyController

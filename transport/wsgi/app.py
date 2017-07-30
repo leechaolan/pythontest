@@ -30,6 +30,6 @@ def run_periodic_task():
 	if conf.periodic_task_interval is None:
 		interval = 60*60*24
 	threading.Timer(interval, run_periodic_task).start()
-run_periodic_task()
+#run_periodic_task()
 
 

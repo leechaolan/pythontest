@@ -6,3 +6,4 @@ from storage import base
 User = base.User
 ControlDriverBase = base.ControlDriverBase
 Business = base.Business
+CfgNotify = base.CfgNotify
