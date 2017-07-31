@@ -1,0 +1,11 @@
+[oslo.config.opts]
+nmc_agent.common.configs = nmc_agent.common.configs:_config_options
+nmc_agent.storage.sqlalchemy = nmc_agent.storage.sqlalchemy.options:_config_options
+nmc_agent.transport.base = nmc_agent.transport.base:_config_options
+nmc_agent.transport.wsgi = nmc_agent.transport.wsgi.driver:_config_options
+
+[nmc_agent.transport]
+wsgi = nmc_agent.transport.wsgi.driver:Driver
+
+[nmc_agent.control.storage]
+sqlalchemy = nmc_agent.storage.driver:ControlDriver
