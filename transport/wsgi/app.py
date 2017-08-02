@@ -3,8 +3,6 @@ from oslo_log import log
 import bootstrap
 import os
 import service
-#from transport.wsgi import driver
-#from storage import controller
 
 conf = cfg.CONF
 log.register_options(conf)
@@ -31,5 +29,3 @@ def run_periodic_task():
 		interval = 60*60*24
 	threading.Timer(interval, run_periodic_task).start()
 #run_periodic_task()
-
-

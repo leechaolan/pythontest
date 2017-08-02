@@ -51,4 +51,5 @@ class ControlDriver(storage.ControlDriverBase):
 
 	@property
 	def cfg_notify_controller(self):
-		controller = con.CfgNotifyController
+		controller = con.CfgNotifyController(self)
+		return controller

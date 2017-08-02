@@ -28,8 +28,8 @@ class Business(ControllerBase):
 @six.add_metaclass(abc.ABCMeta)
 class CfgNotify(ControllerBase):
 
-	def list(self, project_id=None):
-		return self._list(project_id)
+	def list(self, result_dict, project_id=None):
+		return self._list(result_dict, project_id)
 	_list = abc.abstractmethod(lambda x: None)
 
 @six.add_metaclass(abc.ABCMeta)

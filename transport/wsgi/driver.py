@@ -21,7 +21,7 @@ class Driver(transport.DriverBase):
 	def _init_routes(self):
 		endpoints = [('/users', user.ItemResource(self._storage.user_controller)),
 		             ('/business', business.ItemResource(self._storage.business_controller)),
-		             ('/business_config_notify', cfg_notify.ItemResource(self._storage.cfg_notify_controller))]
+		             ('/business_config_notify', cfg_notify.ItemResource(self._conf, self._storage.cfg_notify_controller))]
 		self.app = falcon.API()
 		self.app.add_error_handler(Exception, self._error_handler)
 		for route, resource in endpoints:
