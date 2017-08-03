@@ -8,13 +8,20 @@ from storage import utils
 LOG = log.getLogger(__name__)
 
 class CfgNotifyController(storage.CfgNotify):
+	
+	def get_pe_ip(self, pe_code):
+		sel_field = [tables.Pe.c.pe_default_port_ip]
+		sel = sq.sql.select(sel_field, tables.Pe.c.pe_code == pe_code)
+		result = self.driver.run(sel)
+
+		for i in result:
+			pe_ip = i['pe_default_port_ip']
+			return pe_ip
 
 	def get_agent_ip(self, pe_code):
-		sel_field = []
-		sel_access_list = []
-		sel_field = ([tables.Ce.c.pe_id, 
-				      tables.Pe.c.host_id,
-					  tables.Host.c.host_ip_address])
+		sel_field = [tables.Ce.c.pe_id, 
+		             tables.Pe.c.host_id,
+	                 tables.Host.c.host_ip_address]
 		sel = sa.sql.select(sel_field, 
 				            tables.Pe.c.pe_code == pe_code).select_from(tables.Ce.join(tables.Pe, 
 									                                                   tables.Ce.c.pe_id == tables.Pe.c.id))
@@ -23,10 +30,11 @@ class CfgNotifyController(storage.CfgNotify):
 			print i['host_ip_address']
 			host_ip = i['host_ip_address']
 			return host_ip
-		pass
 
 	def create_user_to_agent(self, payload):
 		ip = self.get_agent_ip(payload['pe_code'])
+		pe_ip = self.get_pe_ip(payload['pe_code'])
+		payload['pe_ip'] = pe_ip
 		url = 'http://' + ip + ':' + 9001 + '/users'
 		resp = utils.make_notify(payload, url)
 		return resp['result']
@@ -70,6 +78,47 @@ class CfgNotifyController(storage.CfgNotify):
 						while (result is not True):
 							result = create_user_to_agent(instance_dict)
 							time.sleep(20)
+						sel = sa.sql.select([tables.Pe.c.pe_id], tables.Pe.c.pd_code == j['pe_code'])
+						result = self.driver.run(sel)
+						for k in result:
+							pe_id = k['pe_id']
+						ins = sa.sql.expression.insert(tables.Ce).values(virtual_network_number=j['virtual_network_number'],
+								                                         customer_id=customer_id,
+																		 customer_code=customer_code,
+																		 access_instance_id=j['access_instance_id'],
+																		 tunnel_type=j['tunnel_type'],
+																		 vpn_cli_ip=j['openvpn_client_ip'],
+																		 username=j['username'],
+																		 password=j['password'],
+																		 work_mode=j['work_mode'],
+																		 pe_id=pe_id)
+
+						self._storage_controller.run(ins)
+						ce_row_md5 = j['virtual_network_number'] + customer_id + customer_code +\
+						             j['access_instance_id'] + j['tunnel_type'] + j['openvpn_client_ip'] +\
+									 j['username'] + j['password'] + j['work_mode'] + j['pe_code']
+						ce_row_md5_val = utils.md5sum(ce_row_md5)
+						
+						ins = sa.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=ce_row_md5_val,
+								                                               virtual_network_number=j['virtual_network_number'],
+																			   customer_id=customer_id,
+																			   customer_code=customer_code,
+																			   access_instance_id=j['access_instance_id'],
+																			   tunnel_type=j['tunnel_type'],
+																			   vpn_cli_ip=j['vpn_cli_ip'],
+																			   username=j['username'],
+																			   password=j['password'],
+																			   pe=j['pe_code'])
+
+						self._storage_controller.run(ins)
+						sel = sq.sql.select([tables.Ce_total.c.ce_table_md5sum])
+						result = self.driver.run(sel)
+						ce_table_md5sum = ''
+						for i in result:
+							ce_table_md5sum += i['ce_row_md5sum']
+						ce_table_md5sum_value = utils.md5sum(ce_table_md5sum)
+						stmt = tables.Ce_total.update().values(ce_table_md5sum=ce_table_md5sum_value)
+						self.driver.run(stmt)
 
 	def make_user_payload(self, access_instance_id):
 		pass
