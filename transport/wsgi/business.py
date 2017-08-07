@@ -22,5 +22,4 @@ class ItemResource(object):
 		resp.status = falcon.HTTP_200
 		print '=========================== Business called !============='
 		response_body = self._business_controller.list(project_id=None)
-		res = {}
-		resp.body = utils.to_json(res)
+		resp.body = utils.to_json(response_body)

@@ -13,61 +13,61 @@ class BusinessController(storage.Business):
 		if project_id is None:
 			project_id = ''
 
-		pe_fields = [tables.Pe.c.pe_code,
-		             tables.Pe.c.pe_vpn_server_ip,
-		             tables.Pe.c.pe_vpn_access_port]
-		ce_fields = [tables.Ce.c.id,
-		             tables.Ce.c.customer_id,
-		             tables.Ce.c.customer_code,
-		             tables.Ce.c.virtual_network_number,
-		             tables.Ce.c.access_instance_id,
-		             tables.Ce.c.work_mode,
-		             tables.Ce.c.tunnel_type,
-					 tables.Ce.c.vpn_cli_ip,
-					 tables.Ce.c.username,
-					 tables.Ce.c.password]
+		ins_list_fields = [tables.Ce.c.access_instance_id,
+		                   tables.Ce.c.work_mode,
+		                   tables.Ce.c.tunnel_type,
+						   tables.Ce.c.vpn_cli_ip,
+						   tables.Ce.c.username,
+						   tables.Ce.c.password,
+		                   tables.Pe.c.pe_code,
+						   tables.Pe.c.pe_vpn_server_ip,
+						   tables.Pe.c.pe_vpn_access_port
+						   ]
 
-		sel = sa.sql.select(tables.Ce.c.customer_id, tables.Ce.c.customer_code)
+
+		sel = sa.sql.select([tables.Ce.c.customer_id, tables.Ce.c.customer_code])
 		ces = self.driver.run(sel)
-		customer_id = []
-		customer_code = []
-		vnetid = []
+		datalist = []
+		result_dict = {}
 
 		for i in ces:
-			customer_id.append(i['customer_id'])
-			customer_code.append(i['customer_code'])
-			vnet_list.append([])
-		celst = [{'customer_id': i, 'customer_code': c} for i, c in zip(customer_id, customer_code)]
+			datalist_dic = {}
+			datalist_dic['customer_id'] = i['customer_id']
+			datalist_dic['customer_code'] = i['customer_code']
+			virtual_network_lst = []
+			sel = sa.sql.select(tables.Ce.c.virtual_network_id, tables.Ce.c.customer_i == i['customer_id'])
+			result = self.driver.run(sel)
+			for j in result:
+				vnet_dict = {}
+				vnet_dict['virtual_network_number'] = j['virtual_network_number']
+				sel = sa.sql.select(ins_list_fields, 
+						            tables.Ce.c.virtual_network_number == j['virtual_network_number']).select_from(tables.Pe.join(tables.Ce, tables.Ce.c.pe_id == tables.Pe.c.id))
+				result = self.driver.run(sel)
+				access_instance_lst = []
+				for k in result:
+					instance_list_dict = {}
+					instance_list['access_instance_id'] = k['access_instance_id']
+					instance_list['pe_code'] = k['pe_code']
+					instance_list['work_mode'] = k['work_mode']
+					instance_list['tunnel_type'] = k['tunnel_type']
+					instance_list['access_server_ip'] = k['pe_vpn_server_ip']
+					instance_list['access_server_port'] = k['pe_vpn_access_port']
+					instance_list['openvpn_client_ip'] = k['vpn_cli_ip']
+					instance_list['username'] = k['username']
+					instance_list['password'] = k['password']
+					access_instance_lst.append(instance_list_dict)
+				vnet_dict['access_instance_list'] = access_instance_lst
+				virtual_network_lst.append(vnet_dict)
+			customer_dic['virtual_network_list'] = virtual_network_lst
+			datalist.append(datalist_dic)
+	
+		result_dict['data_list'] = datalist
+		result_dict['error_code'] = 1
+		result_dict['error_msg'] = ''
+		result_dict['result'] = 1
 
-		sel = sa.sql.select(tables.Ce.c.customer_id, tables.Ce.c.customer_code)
-		ces = self.driver.run(sel)
-		index = 0
-		for i in ces:
-			vnetid = []
-			access_ins_lst = []
-			sel = sa.sql.select(tables.Ce.c.virtual_network_id, tables.Ce.c.customer_id == i['customer_id'])
-			res = self.driver.run(sel)
-			for j in ces:
-				vnetid.append(j['virtual_network_number'])
-			vnet_id_lst = [{'virtual_network_number': n} for n in zip(vnetid)]
-			celst[index]['virtual_network_list'] = vnet_id_lst
-			index += 1
 
-		sel = sa.sql.select(tables.Ce.c.customer_id, tables.Ce.c.customer_code)
-		ces = self.driver.run(sel)
-		for i in ces:
-			sel = sa.sql.select(tables.Ce.c.virtual_network_id, tables.Ce.c.customer_id == i['customer_id'])
-			res = self.driver.run(sel)
-			for j in ces:
-				sel = sa.sql.select(ce_fields, tables.Ce.c.virtual_network_number == j['virtual_network_number'])
-				precs = self.driver.run(sel)
-				ins_id = []
-				pe_code = []
-				
-
-		select_fields = [tables.]
-
-		return {}
+		return result_dict
 
 #		def it():
 #			for rec in records:
