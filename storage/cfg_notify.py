@@ -1,5 +1,7 @@
 import time
+import threading
 from oslo_log import log
+from oslo_serialization import jsonutils
 import sqlalchemy as sa
 import storage
 from storage import tables
@@ -8,7 +10,25 @@ from storage import utils
 LOG = log.getLogger(__name__)
 
 class CfgNotifyController(storage.CfgNotify):
-	
+
+	def notify_boss(self):
+		notify_id = time.time()
+		notify_dic = {'query_id': notify_id}
+		body = jsonutils.loads(notify_dic)
+		make_notify(body, self._boss_url)
+
+	def looping_call_agent(self, instance_dict):
+		default_call_interval = 20
+		t = threading.Timer(default_call_interval, self.looping_call_agent)
+		t.start()
+		result = self.create_user_to_agent(instance_dict)
+
+		if result is 1:
+			t.cancel()
+			self._notify_list.remove(instance_dict['access_instance_id'])
+		if self._notify_list is []:
+			self.notify_boss()
+
 	def get_pe_ip(self, pe_code):
 		sel_field = [tables.Pe.c.pe_default_port_ip]
 		sel = sq.sql.select(sel_field, tables.Pe.c.pe_code == pe_code)
@@ -39,7 +59,9 @@ class CfgNotifyController(storage.CfgNotify):
 		resp = utils.make_notify(payload, url)
 		return resp['result']
 
-	def _list(self, result_dict, project_id=None):
+	def _list(self, result_dict, boss_url, project_id=None):
+		# save boss URL first
+		self._boss_url = boss_url 
 		access_instance_list =  []
 		access_instance_id_list = []
 		customer_code = result_dict['data_list'][0]['customer_code']
@@ -69,15 +91,14 @@ class CfgNotifyController(storage.CfgNotify):
 		for i in result:
 			sel_access_list.append(i['access_instance_id'])
 
+		self._notify_list = []
 		for i in access_instance_id_list:
 			if i not in sel_access_list:
 				for j in access_instance_list:
 					if j['access_instance_id'] == i:
 						instance_dict = dict(j)
-						result = False
-						while (result is not True):
-							result = create_user_to_agent(instance_dict)
-							time.sleep(20)
+						self._notify_list.append(j['access_instance_id'])
+						self.looping_call_agent(instance_dict)
 						sel = sa.sql.select([tables.Pe.c.pe_id], tables.Pe.c.pd_code == j['pe_code'])
 						result = self.driver.run(sel)
 						for k in result:

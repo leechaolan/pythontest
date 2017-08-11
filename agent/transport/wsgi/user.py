@@ -25,7 +25,9 @@ class ItemResource(object):
 		password = req.stream['password']
 		userip = req.stream['openvpn_client_ip']
 		pe_ip = req.stream['pe_ip']
-		guest.start_domain(domname)
+		result = guest.start_domain(domname)
 		utils.add_user(username, password, userip, pe_ip)
 		resp.status = falcon.HTTP_200
-		resp.body = 'nmc-agent'
+		if result is False:
+			resp.body = '{"result": 0}'
+		resp.body = '{"result": 1}'

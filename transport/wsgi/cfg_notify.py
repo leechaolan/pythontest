@@ -31,9 +31,6 @@ class ItemResource(object):
 											  body=urllib.urlencode(body_dict))
 		list_result = context.decode()
 		result_dict = jsonutils.loads(list_result)
-		self._cfg_notify_controller.list(result_dict, project_id=None)
 		notify_boss_url = self._conf.boss_deploy_url
-		notify_id = time.time()
-		notify_dic = {'query_id': notify_id}
-		body = jsonutils.loads(notify_dic)
-		make_notify(body, notify_boss_url)
+		self._cfg_notify_controller.list(result_dict, notify_boss_url, project_id=None)
+

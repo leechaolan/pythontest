@@ -1,6 +1,7 @@
 import time
 import httplib2
 import urllib
+import socket
 import json
 from stevedore import driver
 from oslo_serialization import jsonutils
@@ -42,12 +43,16 @@ def md5sum(code_str):
 	return hashmd5.hexdigest()
 
 def make_notify(req_body_dict, url):
-	http = httplib2.Http()
+	#set request timeout=15 to avoid block.
+	http = httplib2.Http(timeout=15)
 	timestamp = int(time.time())
-	#body_dict = {'query_id': timestamp, 'node_code': '', 'host_code': '', 'pe_code': ''}
-	resp, context = http.request(url,
-			                     method="POST",
-								 headers={'Context-Type': 'application/x-www-form-urlencoded'},
-								 body=urllib.urlencode(req_body_dict))
+	try:
+		resp, context = http.request(url,
+				                     method="POST",
+									 headers={'Context-Type': 'application/x-www-form-urlencoded'},
+									 body=urllib.urlencode(req_body_dict))
+	except (httplib2.HttpLib2Error, socket.error) as ex:
+		LOG.error(u'Request time out %s', url)
+		return False
 	list_result = context.decode()
 	return list_result
