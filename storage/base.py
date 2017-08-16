@@ -33,6 +33,13 @@ class CfgNotify(ControllerBase):
 	_list = abc.abstractmethod(lambda x: None)
 
 @six.add_metaclass(abc.ABCMeta)
+class Mansync(ControllerBase):
+
+	def sync(self, conf):
+		return self._sync(conf)
+	_sync = abc.abstractmethod(lambda x: None)
+
+@six.add_metaclass(abc.ABCMeta)
 class DriverBase(object):
 
 	def __init__(self, conf):
@@ -51,4 +58,8 @@ class ControlDriverBase(DriverBase):
 	
 	@abc.abstractproperty
 	def cfg_notify_controller(self):
+		raise NotImplementedError
+
+	@abc.abstractproperty
+	def mansync_controller(self):
 		raise NotImplementedError

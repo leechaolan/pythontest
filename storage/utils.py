@@ -45,14 +45,20 @@ def md5sum(code_str):
 def make_notify(req_body_dict, url):
 	#set request timeout=15 to avoid block.
 	http = httplib2.Http(timeout=15)
+	http.force_exception_to_status_code = True
 	timestamp = int(time.time())
 	try:
 		resp, context = http.request(url,
 				                     method="POST",
 									 headers={'Context-Type': 'application/x-www-form-urlencoded'},
 									 body=urllib.urlencode(req_body_dict))
-	except (httplib2.HttpLib2Error, socket.error) as ex:
-		LOG.error(u'Request time out %s', url)
+	except httplib2.HttpLib2Error, e:
+		LOG.error(u'POST %s %s', url, context)
 		return False
-	list_result = context.decode()
+	if resp.status is not 200:
+		LOG.error(u'POST %s %s HTTP:%s', url, context, resp.status)
+	try:
+		list_result = context.decode()
+	except httplib2.FailedToDecompressContent, e:
+		pass
 	return list_result

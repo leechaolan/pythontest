@@ -29,4 +29,5 @@ class ItemResource(object):
 
 	def on_post(self, req, resp):
 		resp.status = falcon.HTTP_200
-		resp.body = 'test'
+		response_body = self._user_controller.list(project_id=None)
+		resp.body = utils.to_json(response_body)

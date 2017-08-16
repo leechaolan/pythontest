@@ -1,4 +1,5 @@
 import time
+import socket
 import sqlalchemy as sa
 from sqlalchemy import func
 import httplib2
@@ -71,93 +72,104 @@ class Periodic_Task(object):
 		payload['pe_ip'] = pe_ip
 		payload['method'] = method
 		url = 'http://' + str(ip) + ':' + '9001' + '/users'
-		print url
 		resp = utils.make_notify(payload, url)
+		print resp
 		return resp['result']
 
 	def list_boss_pe_endpointt(self):
 		http = httplib2.Http()
+		http.force_exception_to_status_code = True
 		timestamp = int(time.time())
 		body_dict = {'query_id': timestamp, 'node_code': '', 'host_code': '', 'pe_code': ''}
-		resp, context = http.request(self._conf.boss_operate_uri,
-				               method="POST",
-							   headers={'Context-Type': 'application/x-www-form-urlencoded'},
-							   body=urllib.urlencode(body_dict))
-		self.pe_list_result = context.decode()
+		try:
+			resp, context = http.request(self._conf.boss_operate_config_url,
+					                     method="POST",
+										 headers={'Context-Type': 'application/x-www-form-urlencoded'},
+										 body=urllib.urlencode(body_dict))
+		except (httplib2.HttpLib2Error, socket.error) as ex:
+			LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, context)
+			raise
+		if resp.status is 200:
+			try:
+				self.pe_list_result = context.decode()
+			except httplib2.FailedToDecompressContent, e:
+				LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, context)
+		else:
+			LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, resp.reason)
 
 	def format_pe_list_result(self):
 		# First compare each item count.
 		# If count different chanage it refer to result from BOSS
 		LOG.debug(u'begin contrast between local db and result from invoke BOSS list endpoint')
-		list_result_decode = jsonutils.loads(self.pe_list_result)
-		self._list_result_decode = list_result_decode
-		#print self._list_result_decode
+		if self.pe_list_result:
+			list_result_decode = jsonutils.loads(self.pe_list_result)
+			self._list_result_decode = list_result_decode
 
-		node_count = len(self._list_result_decode['data_list'])
-		node_list = self._list_result_decode['data_list']
+			node_count = len(self._list_result_decode['data_list'])
+			node_list = self._list_result_decode['data_list']
 
-		row_lst = []
-		for i in node_list:
-			host_count = len(i['host_list'])
-			host_list = i['host_list']
-			node_code = i['node_code']
-			sel = sa.sql.select([func.count()]).select_from(tables.Host)
-			result = self._storage_controller.run(sel)
-			select_count = int(result.fetchone()[0])
-			for j in host_list:
-				if 'pe_list' in j:
-					pe_list = j['pe_list']
-					pe_count = len(j['pe_list'])
-					for k in pe_list:
-						pe_row_dict = {}
-						pe_row_dict['host_code'] = j['host_code']
-						if 'host_type' in j:
-							pe_row_dict['host_type'] = j['host_type']
-						pe_row_dict['host_work_status'] = j['host_work_status']
-						if 'host_ip_address' in j:
-							pe_row_dict['host_ip_address'] = j['host_ip_address']
-							self._host_ip_list.append(j['host_ip_address'])
-						pe_row_dict['node_code'] = i['node_code']
-						pe_row_dict['node_type'] = i['node_type']
-						pe_row_dict['pe_code'] = k['pe_code']
-						pe_row_dict['pe_type'] = k['pe_type']
-						pe_row_dict['pe_work_status'] = k['pe_work_status']
-						pe_row_dict['pe_default_port_ip'] = k['pe_vm_ip']
-						pe_row_dict['pe_vlan_port_ip'] = k['pe_sdn_ip']
-						pe_row_dict['pe_vpn_server_ip'] = k['pe_access_server_ip']
-						pe_row_dict['pe_vpn_ip_range_start'] = k['pe_access_ip_pool_begin_ip']
-						pe_row_dict['pe_vpn_ip_range_end'] = k['pe_access_ip_pool_end_ip']
-						pe_row_dict['pe_vpn_access_port'] = k['pe_access_port']
-						pe_row_dict['virtual_network_number'] = k['virtual_network_number']
-						row_lst.append(pe_row_dict)
-		print '\n'
-		print row_lst
-		for i in row_lst:
-			md5str = i['node_code'] +                 \
-			         i ['host_code'] +                 \
-			         i ['host_type'] +                 \
-			         i ['host_work_status'] +          \
-			         i ['host_ip_address'] +           \
-			         i ['pe_code'] +                   \
-			         i ['pe_type'] +                   \
-			         i ['pe_work_status'] +            \
-			         i ['pe_default_port_ip'] +        \
-			         i ['pe_vlan_port_ip'] +           \
-			         i ['pe_vpn_server_ip'] +          \
-			         i ['pe_vpn_ip_range_start'] +     \
-			         i ['pe_vpn_ip_range_end'] +       \
-			         i ['pe_vpn_access_port'] +        \
-					 i ['virtual_network_number']
-			md5sum_code = utils.md5sum(md5str)
-			i['pe_row_md5sum'] = md5sum_code
-		md5str_total = ''
-		for i in row_lst:
-			md5str_total += i['pe_row_md5sum']
-		md5sum_code_total = utils.md5sum(md5str)
-		for i in row_lst:
-			i['pe_table_md5sum'] = md5sum_code_total
-
-		self.pe_row_list = row_lst		
+			row_lst = []
+			for i in node_list:
+				host_count = len(i['host_list'])
+				host_list = i['host_list']
+				node_code = i['node_code']
+				sel = sa.sql.select([func.count()]).select_from(tables.Host)
+				result = self._storage_controller.run(sel)
+				select_count = int(result.fetchone()[0])
+				for j in host_list:
+					if 'pe_list' in j:
+						pe_list = j['pe_list']
+						pe_count = len(j['pe_list'])
+						for k in pe_list:
+							pe_row_dict = {}
+							pe_row_dict['host_code'] = j['host_code']
+							if 'host_type' in j:
+								pe_row_dict['host_type'] = j['host_type']
+							pe_row_dict['host_work_status'] = j['host_work_status']
+							if 'host_ip_address' in j:
+								pe_row_dict['host_ip_address'] = j['host_ip_address']
+								self._host_ip_list.append(j['host_ip_address'])
+							pe_row_dict['node_code'] = i['node_code']
+							pe_row_dict['node_type'] = i['node_type']
+							pe_row_dict['pe_code'] = k['pe_code']
+							pe_row_dict['pe_type'] = k['pe_type']
+							pe_row_dict['pe_work_status'] = k['pe_work_status']
+							pe_row_dict['pe_default_port_ip'] = k['pe_vm_ip']
+							pe_row_dict['pe_vlan_port_ip'] = k['pe_sdn_ip']
+							pe_row_dict['pe_vpn_server_ip'] = k['pe_access_server_ip']
+							pe_row_dict['pe_vpn_ip_range_start'] = k['pe_access_ip_pool_begin_ip']
+							pe_row_dict['pe_vpn_ip_range_end'] = k['pe_access_ip_pool_end_ip']
+							pe_row_dict['pe_vpn_access_port'] = k['pe_access_port']
+							pe_row_dict['virtual_network_number'] = k['virtual_network_number']
+							row_lst.append(pe_row_dict)
+			print '\n'
+			print row_lst
+			for i in row_lst:
+				md5str = i['node_code'] +                 \
+				         i ['host_code'] +                 \
+				         i ['host_type'] +                 \
+				         i ['host_work_status'] +          \
+				         i ['host_ip_address'] +           \
+				         i ['pe_code'] +                   \
+				         i ['pe_type'] +                   \
+				         i ['pe_work_status'] +            \
+				         i ['pe_default_port_ip'] +        \
+				         i ['pe_vlan_port_ip'] +           \
+				         i ['pe_vpn_server_ip'] +          \
+				         i ['pe_vpn_ip_range_start'] +     \
+				         i ['pe_vpn_ip_range_end'] +       \
+				         i ['pe_vpn_access_port'] +        \
+						 i ['virtual_network_number']
+				md5sum_code = utils.md5sum(md5str)
+				i['pe_row_md5sum'] = md5sum_code
+			md5str_total = ''
+			for i in row_lst:
+				md5str_total += i['pe_row_md5sum']
+			md5sum_code_total = utils.md5sum(md5str)
+			for i in row_lst:
+				i['pe_table_md5sum'] = md5sum_code_total
+	
+			self.pe_row_list = row_lst		
 
 	def pe_contrast_to_local_db(self):
 		select_fields = [tables.Pe_total.c.id,
@@ -266,50 +278,55 @@ class Periodic_Task(object):
 		timestamp = int(time.time())
 		body_dict = {'query_id': timestamp, 'customer_id': '', 'customer_code': '', 'virtual_network_number': ''}
 		ce_list_result = utils.make_notify(body_dict, self._conf.boss_business_config_url)
-		result_dict = jsonutils.loads(ce_list_result)
+		result_dict = {}
+		try:
+			result_dict = jsonutils.loads(ce_list_result)
+		except ValueError as e:
+			LOG.exception(e)
+			
 		self.ce_list_result = result_dict
 
 	def format_ce_list_result(self):
-		#print self.ce_list_result
 		access_instance_list =  []
-		data_list = self.ce_list_result['data_list']
-		for i in data_list:
-			vnet_list = i['virtual_network_list']
-			for j in vnet_list:
-				instance_list = j['access_instance_list']
-				for k in instance_list:
-					access_instance_dict = {}
-					access_instance_dict['virtual_network_number'] = j['virtual_network_number']
-					access_instance_dict['customer_id'] = i['customer_id']
-					access_instance_dict['customer_code'] = i['customer_code']
-					access_instance_dict['access_instance_id'] = k['access_instance_id']
-					access_instance_dict['tunnel_type'] = k['tunnel_type']
-					access_instance_dict['vpn_cli_ip'] = k['openvpn_client_ip']
-					access_instance_dict['username'] = k['username']
-					access_instance_dict['password'] = k['password']
-					access_instance_dict['work_mode'] = k['work_mode']
-					access_instance_dict['pe_code'] = k['pe_code']
-					row_md5 = access_instance_dict['virtual_network_number'] +    \
-					          str(access_instance_dict['customer_id']) +               \
-					          str(access_instance_dict['customer_code']) +             \
-					          str(access_instance_dict['access_instance_id']) +        \
-					          str(access_instance_dict['tunnel_type']) +               \
-					          str(access_instance_dict['vpn_cli_ip']) +                \
-					          str(access_instance_dict['username']) +                  \
-					          str(access_instance_dict['password']) +\
-					          str(access_instance_dict['work_mode']) +\
-	                          str(access_instance_dict['pe_code'])
-					row_md5_value = utils.md5sum(row_md5)
-					access_instance_dict['ce_row_md5sum'] = row_md5_value
-					access_instance_list.append(access_instance_dict)
-		self.ce_row_list = access_instance_list
-		ce_table_md5 = ''
-		for i in self.ce_row_list:
-			ce_table_md5 += i['ce_row_md5sum']
-		ce_table_md5sum = utils.md5sum(ce_table_md5)
-		for i in self.ce_row_list:
-			i['ce_table_md5sum'] = ce_table_md5sum
-		print self.ce_row_list
+		if self.ce_list_result:
+			data_list = self.ce_list_result['data_list']
+			for i in data_list:
+				vnet_list = i['virtual_network_list']
+				for j in vnet_list:
+					instance_list = j['access_instance_list']
+					for k in instance_list:
+						access_instance_dict = {}
+						access_instance_dict['virtual_network_number'] = j['virtual_network_number']
+						access_instance_dict['customer_id'] = i['customer_id']
+						access_instance_dict['customer_code'] = i['customer_code']
+						access_instance_dict['access_instance_id'] = k['access_instance_id']
+						access_instance_dict['tunnel_type'] = k['tunnel_type']
+						access_instance_dict['vpn_cli_ip'] = k['openvpn_client_ip']
+						access_instance_dict['username'] = k['username']
+						access_instance_dict['password'] = k['password']
+						access_instance_dict['work_mode'] = k['work_mode']
+						access_instance_dict['pe_code'] = k['pe_code']
+						row_md5 = access_instance_dict['virtual_network_number'] +    \
+						          str(access_instance_dict['customer_id']) +               \
+						          str(access_instance_dict['customer_code']) +             \
+						          str(access_instance_dict['access_instance_id']) +        \
+						          str(access_instance_dict['tunnel_type']) +               \
+						          str(access_instance_dict['vpn_cli_ip']) +                \
+						          str(access_instance_dict['username']) +                  \
+						          str(access_instance_dict['password']) +\
+						          str(access_instance_dict['work_mode']) +\
+	                	          str(access_instance_dict['pe_code'])
+						row_md5_value = utils.md5sum(row_md5)
+						access_instance_dict['ce_row_md5sum'] = row_md5_value
+						access_instance_list.append(access_instance_dict)
+			self.ce_row_list = access_instance_list
+			ce_table_md5 = ''
+			for i in self.ce_row_list:
+				ce_table_md5 += i['ce_row_md5sum']
+			ce_table_md5sum = utils.md5sum(ce_table_md5)
+			for i in self.ce_row_list:
+				i['ce_table_md5sum'] = ce_table_md5sum
+			print self.ce_row_list
 
 	def ce_contrast_to_local_db(self):
 		select_fields = [tables.Ce_total.c.id,

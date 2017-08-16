@@ -5,6 +5,7 @@ import falcon
 from transport.wsgi import user
 from transport.wsgi import business
 from transport.wsgi import cfg_notify
+from transport.wsgi import manualsync
 import transport
 
 LOG = log.getLogger(__name__)
@@ -19,9 +20,10 @@ class Driver(transport.DriverBase):
 		self._init_routes()
 
 	def _init_routes(self):
-		endpoints = [('/users', user.ItemResource(self._storage.user_controller)),
-		             ('/business', business.ItemResource(self._storage.business_controller)),
-		             ('/business_config_notify', cfg_notify.ItemResource(self._conf, self._storage.cfg_notify_controller))]
+		endpoints = [('/operation_status_query', user.ItemResource(self._storage.user_controller)),
+		             ('/business_deploy_query', business.ItemResource(self._storage.business_controller)),
+		             ('/business_config_notify', cfg_notify.ItemResource(self._conf, self._storage.cfg_notify_controller)),
+		             ('/manual_sync', manualsync.ItemResource(self._conf, self._storage.mansync_controller))]
 		self.app = falcon.API()
 		self.app.add_error_handler(Exception, self._error_handler)
 		for route, resource in endpoints:

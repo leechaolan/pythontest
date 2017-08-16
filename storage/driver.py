@@ -53,3 +53,8 @@ class ControlDriver(storage.ControlDriverBase):
 	def cfg_notify_controller(self):
 		controller = con.CfgNotifyController(self)
 		return controller
+
+	@property
+	def mansync_controller(self):
+		controller = con.MansyncController(self)
+		return controller
