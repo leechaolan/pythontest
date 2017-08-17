@@ -5,7 +5,6 @@ class ControllerBase(object):
 	
 	def __init__(self, driver):
 		self.driver = driver
-		print 'controllerBase self.driver %s' % self.driver
 
 @six.add_metaclass(abc.ABCMeta)
 class User(ControllerBase):

@@ -47,7 +47,6 @@ class Periodic_Task(object):
 									                                                   tables.Host.c.host_id == tables.Pe.c.host_id))
 		result = self._storage_controller.run(sel)
 		for i in result:
-			print i['host_ip_address']
 			host_ip = i['host_ip_address']
 			return host_ip
 
@@ -73,8 +72,8 @@ class Periodic_Task(object):
 		payload['method'] = method
 		url = 'http://' + str(ip) + ':' + '9001' + '/users'
 		resp = utils.make_notify(payload, url)
-		print resp
-		return resp['result']
+		if resp is not False:
+			return resp['result']
 
 	def list_boss_pe_endpointt(self):
 		http = httplib2.Http()
@@ -130,7 +129,7 @@ class Periodic_Task(object):
 								pe_row_dict['host_ip_address'] = j['host_ip_address']
 								self._host_ip_list.append(j['host_ip_address'])
 							pe_row_dict['node_code'] = i['node_code']
-							pe_row_dict['node_type'] = i['node_type']
+							#pe_row_dict['node_type'] = i['node_type']
 							pe_row_dict['pe_code'] = k['pe_code']
 							pe_row_dict['pe_type'] = k['pe_type']
 							pe_row_dict['pe_work_status'] = k['pe_work_status']
@@ -142,8 +141,6 @@ class Periodic_Task(object):
 							pe_row_dict['pe_vpn_access_port'] = k['pe_access_port']
 							pe_row_dict['virtual_network_number'] = k['virtual_network_number']
 							row_lst.append(pe_row_dict)
-			print '\n'
-			print row_lst
 			for i in row_lst:
 				md5str = i['node_code'] +                 \
 				         i ['host_code'] +                 \
@@ -173,7 +170,7 @@ class Periodic_Task(object):
 
 	def pe_contrast_to_local_db(self):
 		select_fields = [tables.Pe_total.c.id,
-		                 tables.Pe_total.c.pe_table_md5sum,
+		                 tables.Pe_total.c.pe_row_md5sum,
 		                 tables.Pe_total.c.pe_table_md5sum,
 		                 tables.Pe_total.c.host_code,
 		                 tables.Pe_total.c.host_type,
@@ -225,52 +222,50 @@ class Periodic_Task(object):
 				sel = sa.sql.select([tables.Pe_total.c.pe_code])
 				result = self._storage_controller.run(sel)
 				pe_code = result.fetchone()['pe_code']
-				de = tables.Pe_total.delete().where(tables.Pe_total.pe_row_md5sum == i)
+				de = tables.Pe_total.delete().where(tables.Pe_total.c.pe_row_md5sum == i)
 				self._storage_controller.run(de)
-				de = tables.Pe.delete().where(tables.Pe.pe_code == pe_code)
+				de = tables.Pe.delete().where(tables.Pe.c.pe_code == pe_code)
 				self._storage_controller.run(de)
 
 		for i in lis_md5_lst:
 			if i not in sel_md5_lst:
 				for j in self.pe_row_list:
 					if j['pe_row_md5sum'] == i:
-						print j['host_code']
 						sel = sa.sql.select([tables.Host.c.host_id]).where(tables.Host.c.host_code == j['host_code'])
 						result = self._storage_controller.run(sel)
-						host_id = None
-						for i in result:
-							host_id = i['host_id']
-						print host_id
-						ins = sa.sql.expression.insert(tables.Pe).values(host_id=host_id,
-												        pe_code =j['pe_code'],
-														pe_type=j['pe_type'],
-														pe_work_status=j['pe_work_status'],
-														pe_default_port_ip=j['pe_default_port_ip'],
-														pe_vlan_port_ip=j['pe_vlan_port_ip'],
-														pe_vpn_server_ip=j['pe_vpn_server_ip'],
-														pe_vpn_ip_range_start=j['pe_vpn_ip_range_start'],
-														pe_vpn_ip_range_end=j['pe_vpn_ip_range_end'],
-														pe_vpn_access_port=j['pe_vpn_access_port'],
-														virtual_network_number=j['virtual_network_number'])
-						self._storage_controller.run(ins)
-						ins = sa.sql.expression.insert(tables.Pe_total).values(pe_row_md5sum=j['pe_row_md5sum'],
-								                              pe_table_md5sum=j['pe_table_md5sum'],
-															  host_code=j['host_code'],
-															  host_type=j['host_type'],
-															  host_work_status=j['host_work_status'],
-															  host_ip_address=j['host_ip_address'],
-															  node_code=j['node_code'],
-															  pe_code=j['pe_code'],
-															  pe_type=j['pe_type'],
-															  pe_work_status=j['pe_work_status'],
-															  pe_default_port_ip=j['pe_default_port_ip'],
-															  pe_vlan_port_ip=j['pe_vlan_port_ip'],
-															  pe_vpn_server_ip=j['pe_vpn_server_ip'],
-															  pe_vpn_ip_range_start=j['pe_vpn_ip_range_start'],
-															  pe_vpn_ip_range_end=j['pe_vpn_ip_range_end'],
-															  pe_vpn_access_port=j['pe_vpn_access_port'],
-															  virtual_network_number=j['virtual_network_number'])
-						self._storage_controller.run(ins)
+						if result.rowcount:
+							for i in result:
+								host_id = i['host_id']
+							ins = sa.sql.expression.insert(tables.Pe).values(host_id=host_id,
+													        pe_code =j['pe_code'],
+															pe_type=j['pe_type'],
+															pe_work_status=j['pe_work_status'],
+															pe_default_port_ip=j['pe_default_port_ip'],
+															pe_vlan_port_ip=j['pe_vlan_port_ip'],
+															pe_vpn_server_ip=j['pe_vpn_server_ip'],
+															pe_vpn_ip_range_start=j['pe_vpn_ip_range_start'],
+															pe_vpn_ip_range_end=j['pe_vpn_ip_range_end'],
+															pe_vpn_access_port=j['pe_vpn_access_port'],
+															virtual_network_number=j['virtual_network_number'])
+							self._storage_controller.run(ins)
+							ins = sa.sql.expression.insert(tables.Pe_total).values(pe_row_md5sum=j['pe_row_md5sum'],
+									                              pe_table_md5sum=j['pe_table_md5sum'],
+																  host_code=j['host_code'],
+																  host_type=j['host_type'],
+																  host_work_status=j['host_work_status'],
+																  host_ip_address=j['host_ip_address'],
+																  node_code=j['node_code'],
+																  pe_code=j['pe_code'],
+																  pe_type=j['pe_type'],
+																  pe_work_status=j['pe_work_status'],
+																  pe_default_port_ip=j['pe_default_port_ip'],
+																  pe_vlan_port_ip=j['pe_vlan_port_ip'],
+																  pe_vpn_server_ip=j['pe_vpn_server_ip'],
+																  pe_vpn_ip_range_start=j['pe_vpn_ip_range_start'],
+																  pe_vpn_ip_range_end=j['pe_vpn_ip_range_end'],
+																  pe_vpn_access_port=j['pe_vpn_access_port'],
+																  virtual_network_number=j['virtual_network_number'])
+							self._storage_controller.run(ins)
 		return False
 
 	def list_boss_ce_endpoint(self):
@@ -326,7 +321,6 @@ class Periodic_Task(object):
 			ce_table_md5sum = utils.md5sum(ce_table_md5)
 			for i in self.ce_row_list:
 				i['ce_table_md5sum'] = ce_table_md5sum
-			print self.ce_row_list
 
 	def ce_contrast_to_local_db(self):
 		select_fields = [tables.Ce_total.c.id,
@@ -367,19 +361,23 @@ class Periodic_Task(object):
 		#print sel_md5_lst
 		#print lis_md5_lst
 		
-
 		for i in sel_md5_lst:
 			if i not in lis_md5_lst:
-				sel = sa.sql.select([tables.Ce_total.username,
-				                     tables.Ce_total.password,
-				                     tables.Ce_total.vpn_cli_ip,
-				                     tables.Ce_total.pe_code,
-				                     tables.Ce_total.ce_row_md5sum], 
-									 tables.Ce_total.ce_row_md5sum == i)
+				sel = sa.sql.select([tables.Ce_total.c.username,
+				                     tables.Ce_total.c.password,
+				                     tables.Ce_total.c.vpn_cli_ip,
+				                     tables.Ce_total.c.pe_code,
+				                     tables.Ce_total.c.ce_row_md5sum,
+				                     tables.Ce_total.c.access_instance_id], 
+									 tables.Ce_total.c.ce_row_md5sum == i)
 				result = self._storage_controller.run(sel)
+				access_id_del = 0
 				for j in result:
 					self.to_agent(dict(j), 'delete')
-				de = tables.Pe_total.delete().where(tables.Ce_total.ce_row_md5sum == i)
+					access_id_del = j['access_instance_id']
+				de = tables.Ce_total.delete().where(tables.Ce_total.ce_row_md5sum == i)
+				self._storage_controller.run(de)
+				de = tables.Ce.delete().where(tables.Ce.c.access_instance_id == access_id_del)
 				self._storage_controller.run(de)
 
 		for i in lis_md5_lst:
@@ -387,32 +385,31 @@ class Periodic_Task(object):
 				for j in self.ce_row_list:
 					if j['ce_row_md5sum'] == i:
 						self.to_agent(dict(j), 'create')
-						sel = sa.sql.select([tables.Pe.id], tables.Pe.pe_code == payload['pe_code'])
+						sel = sa.sql.select([tables.Pe.c.id], tables.Pe.c.pe_code == j['pe_code'])
 						result = self._storage_controller.run(sel)
-						for k in result:
-							pe_id = k['pe_id']
-						ins = sa.sql.expression.insert(tables.Ce).values(virtual_network_number=j['virtual_network_number'],
-						#ins = tables.Ce.insert().values(virtual_network_number=j['virtual_network_number'],
-							                                             customer_id=j['customer_id'],
-																		 customer_cod=j['customer_code'],
-																		 access_instance_id=j['access_instance_id'],
-																		 tunnel_type=j['tunnel_type'],
-																		 vpn_cli_ip=j['vpn_cli_ip'],
-																		 username=j['username'],
-																		 password=j['password'],
-																		 work_mode=j['work_mode'],
-																		 pe_id=pe_id)
-						self._storage_controller.run(ins)
-						ins = sq.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=j['ce_row_md5sum'],
-							                                                   ce_table_md5sum=j['ce_table_md5'],
-																			   virtual_network_number=j['virtual_network_number'],
-																			   customer_id=j['customer_id'],
-																			   customer_code=j['customer_code'],
-																			   access_instance_id=j['access_instance_id'],
-																			   tunnel_type=j['tunnel_type'],
-																			   vpn_cli_ip=j['vpn_cli_ip'],
-																			   username=j['username'],
-																			   password=j['password'],
-																			   work_mode=j['work_mode'],
-																			   pe_code=j['pe_code'])
-
+						if result.rowcount:
+							for k in result:
+								pe_id = k['pe_id']
+							ins = sa.sql.expression.insert(tables.Ce).values(virtual_network_number=j['virtual_network_number'],
+								                                             customer_id=j['customer_id'],
+																			 customer_code=j['customer_code'],
+																			 access_instance_id=j['access_instance_id'],
+																			 tunnel_type=j['tunnel_type'],
+																			 vpn_cli_ip=j['vpn_cli_ip'],
+																			 username=j['username'],
+																			 password=j['password'],
+																			 work_mode=j['work_mode'],
+																			 pe_id=pe_id)
+							self._storage_controller.run(ins)
+							ins = sq.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=j['ce_row_md5sum'],
+								                                                   ce_table_md5sum=j['ce_table_md5'],
+																				   virtual_network_number=j['virtual_network_number'],
+																				   customer_id=j['customer_id'],
+																				   customer_code=j['customer_code'],
+																				   access_instance_id=j['access_instance_id'],
+																				   tunnel_type=j['tunnel_type'],
+																				   vpn_cli_ip=j['vpn_cli_ip'],
+																				   username=j['username'],
+																				   password=j['password'],
+																				   work_mode=j['work_mode'],
+																				   pe_code=j['pe_code'])

@@ -140,6 +140,7 @@ class CfgNotifyController(storage.CfgNotify):
 						ce_table_md5sum_value = utils.md5sum(ce_table_md5sum)
 						stmt = tables.Ce_total.update().values(ce_table_md5sum=ce_table_md5sum_value)
 						self.driver.run(stmt)
+		self.driver.close()
 
 	def make_user_payload(self, access_instance_id):
 		pass

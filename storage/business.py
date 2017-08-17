@@ -66,7 +66,7 @@ class BusinessController(storage.Business):
 		result_dict['error_msg'] = ''
 		result_dict['result'] = 1
 
-
+		self.driver.close()
 		return result_dict
 
 #		def it():

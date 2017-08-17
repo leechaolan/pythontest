@@ -21,12 +21,12 @@ def run_periodic_task():
 	#threading.Thread.daemon = True
 	#if conf.periodic_task_interval is None:
 		#interval = 60*60*24
-	#periodic_task.list_boss_pe_endpointt()
-	#periodic_task.format_pe_list_result()
-	#periodic_task.pe_contrast_to_local_db()
-	periodic_task.list_boss_ce_endpoint()
-	periodic_task.format_ce_list_result()
-	periodic_task.ce_contrast_to_local_db()
+	periodic_task.list_boss_pe_endpointt()
+	periodic_task.format_pe_list_result()
+	periodic_task.pe_contrast_to_local_db()
+	#periodic_task.list_boss_ce_endpoint()
+	#periodic_task.format_ce_list_result()
+	#periodic_task.ce_contrast_to_local_db()
 	#interval = conf.periodic_task_interval
 	#t = threading.Timer(interval, run_periodic_task)
 	#t.start()

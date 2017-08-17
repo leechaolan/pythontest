@@ -76,9 +76,10 @@ class UserController(storage.User):
 			
 		response_body = {'result': 1, 'error_code': 0, 'error_msg': ''}
 		response_body['data_list'] = nolst
-		print response_body
+		#print response_body
 
 #		sel = sel.group_by(sa.asc(tables.Node.c.node_code)).limit(10)
+		self.driver.close()
 
 		return response_body
 
