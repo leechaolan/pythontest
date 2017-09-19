@@ -20,11 +20,13 @@ class ItemResource(object):
 		pass
 
 	def on_post(self, req, resp):
-		domname = req.stream['pe_code']
-		username = req.stream['username']
-		password = req.stream['password']
-		userip = req.stream['openvpn_client_ip']
-		pe_ip = req.stream['pe_ip']
+		if req.content_length:
+			data = json.load(req.stream)
+		domname = data['pe_code']
+		username = data['username']
+		password = data['password']
+		userip = data['openvpn_client_ip']
+		pe_ip = data['pe_ip']
 		result = guest.start_domain(domname)
 		utils.add_user(username, password, userip, pe_ip)
 		resp.status = falcon.HTTP_200

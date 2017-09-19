@@ -1,0 +1,11 @@
+[oslo.config.opts]
+pythontest.common.configs = pythontest.common.configs:_config_options
+pythontest.storage.sqlalchemy = pythontest.storage.sqlalchemy.options:_config_options
+pythontest.transport.base = pythontest.transport.base:_config_options
+pythontest.transport.wsgi = pythontest.transport.wsgi.driver:_config_options
+
+[pythontest.transport]
+wsgi = pythontest.transport.wsgi.driver:Driver
+
+[pythontest.control.storage]
+sqlalchemy = pythontest.storage.driver:ControlDriver
