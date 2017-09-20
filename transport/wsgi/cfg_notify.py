@@ -24,7 +24,7 @@ class ItemResource(object):
 		resp.body = '{"result": 1, "error_code": 0, "error_msg": ""}'
 		http = httplib2.Http()
 		timestamp = int(time.time())
-		body_dict = {'query_id': timestamp, 'customer_id': 1, 'custome_code': '', 'virtual_network_number': ''}
+		body_dict = {'query_id': timestamp, 'customer_id': doc['customer_id'], 'customer_code': doc['customer_code'], 'virtual_network_number': ''}
 		resp_for_list, context = http.request(self._conf.boss_business_config_url,
 				                              method="POST",
 											  headers={'Context-Type': 'application/x-www-form-urlencoded'},

@@ -17,11 +17,14 @@ class CfgNotifyController(storage.CfgNotify):
 		body = jsonutils.loads(notify_dic)
 		make_notify(body, self._boss_url)
 
-	def looping_call_agent(self, instance_dict):
-		default_call_interval = 20
+	def looping_call_agent(self):
+		LOG.debug(u'self._notify_list is %s', self._notify_list)
+		default_call_interval = 30
 		t = threading.Timer(default_call_interval, self.looping_call_agent)
+		t.daemon = True
 		t.start()
-		result = self.create_user_to_agent(instance_dict)
+		#instance_dict = {}
+		result = self.create_user_to_agent(self.instance_dict)
 
 		if result is 1:
 			t.cancel()
@@ -31,12 +34,15 @@ class CfgNotifyController(storage.CfgNotify):
 
 	def get_pe_ip(self, pe_code):
 		sel_field = [tables.Pe.c.pe_default_port_ip]
-		sel = sq.sql.select(sel_field, tables.Pe.c.pe_code == pe_code)
+		sel = sa.sql.select(sel_field, tables.Pe.c.pe_code == pe_code)
 		result = self.driver.run(sel)
-
-		for i in result:
-			pe_ip = i['pe_default_port_ip']
+	
+		if result.rowcount:
+			for i in result:
+				pe_ip = i['pe_default_port_ip']
 			return pe_ip
+		else:
+			return ''
 
 	def get_agent_ip(self, pe_code):
 		sel_field = [tables.Ce.c.pe_id, 
@@ -46,18 +52,27 @@ class CfgNotifyController(storage.CfgNotify):
 				            tables.Pe.c.pe_code == pe_code).select_from(tables.Ce.join(tables.Pe, 
 									                                                   tables.Ce.c.pe_id == tables.Pe.c.id))
 		result = self.driver.run(sel)
-		for i in result:
-			print i['host_ip_address']
-			host_ip = i['host_ip_address']
+		if result.rowcount:
+			for i in result:
+				host_ip = i['host_ip_address']
 			return host_ip
+		else:
+			return ''
 
 	def create_user_to_agent(self, payload):
 		ip = self.get_agent_ip(payload['pe_code'])
 		pe_ip = self.get_pe_ip(payload['pe_code'])
-		payload['pe_ip'] = pe_ip
-		url = 'http://' + ip + ':' + 9001 + '/users'
-		resp = utils.make_notify(payload, url)
-		return resp['result']
+		LOG.debug(u'ip=%s pe_ip=%s', ip, pe_ip)
+
+		if ip and pe_ip:
+			payload['pe_ip'] = pe_ip
+			url = 'http://' + str(ip) + ':' + '9001' + '/users'
+			LOG.debug(u'paylaod: %s - url: %s', payload, url)
+			resp = utils.make_notify(payload, url)
+			return resp['result']
+		else:
+			LOG.error(u'agent ip or pe_ip is none')
+			return ''
 
 	def _list(self, result_dict, boss_url, project_id=None):
 		# save boss URL first
@@ -96,50 +111,52 @@ class CfgNotifyController(storage.CfgNotify):
 			if i not in sel_access_list:
 				for j in access_instance_list:
 					if j['access_instance_id'] == i:
-						instance_dict = dict(j)
+						self.instance_dict = dict(j)
 						self._notify_list.append(j['access_instance_id'])
-						self.looping_call_agent(instance_dict)
-						sel = sa.sql.select([tables.Pe.c.pe_id], tables.Pe.c.pd_code == j['pe_code'])
+						self.looping_call_agent()
+						sel = sa.sql.select([tables.Pe.c.id], tables.Pe.c.pe_code == j['pe_code'])
 						result = self.driver.run(sel)
+						pe_id = 0
 						for k in result:
 							pe_id = k['pe_id']
-						ins = sa.sql.expression.insert(tables.Ce).values(virtual_network_number=j['virtual_network_number'],
-								                                         customer_id=customer_id,
-																		 customer_code=customer_code,
-																		 access_instance_id=j['access_instance_id'],
-																		 tunnel_type=j['tunnel_type'],
-																		 vpn_cli_ip=j['openvpn_client_ip'],
-																		 username=j['username'],
-																		 password=j['password'],
-																		 work_mode=j['work_mode'],
-																		 pe_id=pe_id)
+						if pe_id:
+							ins = sa.sql.expression.insert(tables.Ce).values(virtual_network_number=j['virtual_network_number'],
+									                                         customer_id=customer_id,
+																			 customer_code=customer_code,
+																			 access_instance_id=j['access_instance_id'],
+																			 tunnel_type=j['tunnel_type'],
+																			 vpn_cli_ip=j['openvpn_client_ip'],
+																			 username=j['username'],
+																			 password=j['password'],
+																			 work_mode=j['work_mode'],
+																			 pe_id=pe_id)
 
-						self._storage_controller.run(ins)
-						ce_row_md5 = j['virtual_network_number'] + customer_id + customer_code +\
-						             j['access_instance_id'] + j['tunnel_type'] + j['openvpn_client_ip'] +\
-									 j['username'] + j['password'] + j['work_mode'] + j['pe_code']
-						ce_row_md5_val = utils.md5sum(ce_row_md5)
-						
-						ins = sa.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=ce_row_md5_val,
-								                                               virtual_network_number=j['virtual_network_number'],
-																			   customer_id=customer_id,
-																			   customer_code=customer_code,
-																			   access_instance_id=j['access_instance_id'],
-																			   tunnel_type=j['tunnel_type'],
-																			   vpn_cli_ip=j['vpn_cli_ip'],
-																			   username=j['username'],
-																			   password=j['password'],
-																			   pe=j['pe_code'])
+							self.driver.run(ins)
+							ce_row_md5 = j['virtual_network_number'] + customer_id + customer_code +\
+							             j['access_instance_id'] + j['tunnel_type'] + j['openvpn_client_ip'] +\
+										 j['username'] + j['password'] + j['work_mode'] + j['pe_code']
+							ce_row_md5_val = utils.md5sum(ce_row_md5)
+							
+							ins = sa.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=ce_row_md5_val,
+									                                               virtual_network_number=j['virtual_network_number'],
+																				   customer_id=customer_id,
+																				   customer_code=customer_code,
+																				   access_instance_id=j['access_instance_id'],
+																				   tunnel_type=j['tunnel_type'],
+																				   vpn_cli_ip=j['vpn_cli_ip'],
+																				   username=j['username'],
+																				   password=j['password'],
+																				   pe=j['pe_code'])
 
-						self._storage_controller.run(ins)
-						sel = sq.sql.select([tables.Ce_total.c.ce_table_md5sum])
-						result = self.driver.run(sel)
-						ce_table_md5sum = ''
-						for i in result:
-							ce_table_md5sum += i['ce_row_md5sum']
-						ce_table_md5sum_value = utils.md5sum(ce_table_md5sum)
-						stmt = tables.Ce_total.update().values(ce_table_md5sum=ce_table_md5sum_value)
-						self.driver.run(stmt)
+							self.driver.run(ins)
+							sel = sq.sql.select([tables.Ce_total.c.ce_table_md5sum])
+							result = self.driver.run(sel)
+							ce_table_md5sum = ''
+							for i in result:
+								ce_table_md5sum += i['ce_row_md5sum']
+							ce_table_md5sum_value = utils.md5sum(ce_table_md5sum)
+							stmt = tables.Ce_total.update().values(ce_table_md5sum=ce_table_md5sum_value)
+							self.driver.run(stmt)
 		self.driver.close()
 
 	def make_user_payload(self, access_instance_id):

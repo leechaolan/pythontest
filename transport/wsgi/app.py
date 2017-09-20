@@ -14,16 +14,16 @@ boot = bootstrap.Bootstrap(conf)
 conf.drivers.transport = 'wsgi'
 application = boot.transport()
 app = application.app
-periodic_task = service.Periodic_Task(conf, boot._storage)
+#periodic_task = service.Periodic_Task(conf, boot._storage)
 
 import time, threading
-def run_periodic_task():
+#def run_periodic_task():
 	#threading.Thread.daemon = True
 	#if conf.periodic_task_interval is None:
 		#interval = 60*60*24
-	periodic_task.list_boss_pe_endpointt()
-	periodic_task.format_pe_list_result()
-	periodic_task.pe_contrast_to_local_db()
+	#periodic_task.list_boss_pe_endpointt()
+	#periodic_task.format_pe_list_result()
+	#periodic_task.pe_contrast_to_local_db()
 	#periodic_task.list_boss_ce_endpoint()
 	#periodic_task.format_ce_list_result()
 	#periodic_task.ce_contrast_to_local_db()
@@ -31,4 +31,4 @@ def run_periodic_task():
 	#t = threading.Timer(interval, run_periodic_task)
 	#t.start()
 	#t.cancel()
-run_periodic_task()
+#run_periodic_task()

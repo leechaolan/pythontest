@@ -89,10 +89,8 @@ class Periodic_Task(object):
 			LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, context)
 			raise
 		if resp.status is 200:
-			try:
-				self.pe_list_result = context.decode()
-			except httplib2.FailedToDecompressContent, e:
-				LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, context)
+			#print context.decode()
+			self.pe_list_result = context.decode()
 		else:
 			LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, resp.reason)
 
@@ -197,6 +195,7 @@ class Periodic_Task(object):
 
 		sel = sa.sql.select(select_fields)
 		result = self._storage_controller.run(sel)
+		LOG.debug(u'=========================== count: %d', result.rowcount)
 		# just compare the 'table md5sum' value.
 		#if it is different that means Pe count is different 
 		#here don't need to consider detail operate because Pe already configed before launch
