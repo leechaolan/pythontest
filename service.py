@@ -20,13 +20,6 @@ class Service(object):
 		if self.conf.periodic_task_interval is None:
 			self.periodic_interval = 60*60*24
 
-	def periodic_task(self):
-		print('[%s]periodic is called!' % time.ctime())
-		threading.Timer(self.periodic_interval, periodic_task).start()
-
-	def start(self):
-		pass
-
 class Periodic_Task(object):
 
 	def __init__(self, conf, storage_controller):
@@ -104,15 +97,15 @@ class Periodic_Task(object):
 
 			node_count = len(self._list_result_decode['data_list'])
 			node_list = self._list_result_decode['data_list']
-
+			self._node_list = node_list
 			row_lst = []
 			for i in node_list:
 				host_count = len(i['host_list'])
 				host_list = i['host_list']
 				node_code = i['node_code']
-				sel = sa.sql.select([func.count()]).select_from(tables.Host)
-				result = self._storage_controller.run(sel)
-				select_count = int(result.fetchone()[0])
+				#sel = sa.sql.select([func.count()]).select_from(tables.Host)
+				#result = self._storage_controller.run(sel)
+				#select_count = int(result.fetchone()[0])
 				for j in host_list:
 					if 'pe_list' in j:
 						pe_list = j['pe_list']
@@ -160,7 +153,7 @@ class Periodic_Task(object):
 			md5str_total = ''
 			for i in row_lst:
 				md5str_total += i['pe_row_md5sum']
-			md5sum_code_total = utils.md5sum(md5str)
+			md5sum_code_total = utils.md5sum(md5str_total)
 			for i in row_lst:
 				i['pe_table_md5sum'] = md5sum_code_total
 	
@@ -184,10 +177,7 @@ class Periodic_Task(object):
 		                 tables.Pe_total.c.pe_vpn_ip_range_start,
 		                 tables.Pe_total.c.pe_vpn_ip_range_end,
 		                 tables.Pe_total.c.pe_vpn_access_port,
-		                 tables.Pe_total.c.virtual_network_number,
-		                ]
-
-		
+		                 tables.Pe_total.c.virtual_network_number,]
 		sel = sa.sql.select([func.count()]).select_from(tables.Pe_total)
 		result = self._storage_controller.run(sel)
 		self._selected_pe_count = int(result.fetchone()[0])
@@ -195,27 +185,44 @@ class Periodic_Task(object):
 
 		sel = sa.sql.select(select_fields)
 		result = self._storage_controller.run(sel)
-		LOG.debug(u'=========================== count: %d', result.rowcount)
 		# just compare the 'table md5sum' value.
 		#if it is different that means Pe count is different 
 		#here don't need to consider detail operate because Pe already configed before launch
+		LOG.debug(u'sync data from BOSS and pe count is %d', self._listed_pe_count)
 		for i, v in enumerate(result):
 			if v['pe_table_md5sum'] == self.pe_row_list[i]['pe_table_md5sum']:
 				return True
-				
-		sel = sa.sql.select(select_fields)
+	
+		sel = sa.sql.select([tables.Node.c.node_id])
 		result = self._storage_controller.run(sel)
+		LOG.debug(u'Node count is %d', result.rowcount)
+		if result.rowcount is 0:
+			for i in self._node_list:
+				ins = sa.sql.expression.insert(tables.Node).values(node_code=i['node_code'],
+						                                           isp=i['operator_code'])
+				result = self._storage_controller.run(ins)
+				_primary_key = result.inserted_primary_key[0]
+				if i['host_list']:
+					for j in i['host_list']:
+						ins = sa.sql.expression.insert(tables.Host).values(node_id=_primary_key,
+								                                           host_type=j['host_type'],
+																		   host_work_status=j['host_work_status'],
+																		   host_code=j['host_code'],
+																		   host_ip_address=j['host_ip_address'])
+						self._storage_controller.run(ins)
+
 		sel_md5_lst = []
 		lis_md5_lst = []
-		for i in result:
-			sel_md5_lst.append(i['pe_row_md5sum'])
+		if self._listed_pe_count:
+			sel = sa.sql.select(select_fields)
+			result = self._storage_controller.run(sel)
+			for i in result:
+				sel_md5_lst.append(i['pe_row_md5sum'])
 
 		for j in self.pe_row_list:
 			lis_md5_lst.append(j['pe_row_md5sum'])
-		
 		#print sel_md5_lst
 		#print lis_md5_lst
-
 		for i in sel_md5_lst:
 			if i not in lis_md5_lst:
 				sel = sa.sql.select([tables.Pe_total.c.pe_code])
@@ -225,6 +232,7 @@ class Periodic_Task(object):
 				self._storage_controller.run(de)
 				de = tables.Pe.delete().where(tables.Pe.c.pe_code == pe_code)
 				self._storage_controller.run(de)
+		self._update_pe_total_table_md5sum()
 
 		for i in lis_md5_lst:
 			if i not in sel_md5_lst:
@@ -235,6 +243,7 @@ class Periodic_Task(object):
 						if result.rowcount:
 							for i in result:
 								host_id = i['host_id']
+
 							ins = sa.sql.expression.insert(tables.Pe).values(host_id=host_id,
 													        pe_code =j['pe_code'],
 															pe_type=j['pe_type'],
@@ -265,6 +274,7 @@ class Periodic_Task(object):
 																  pe_vpn_access_port=j['pe_vpn_access_port'],
 																  virtual_network_number=j['virtual_network_number'])
 							self._storage_controller.run(ins)
+		self._update_pe_total_table_md5sum()
 		return False
 
 	def list_boss_ce_endpoint(self):
@@ -347,12 +357,13 @@ class Periodic_Task(object):
 			if v['ce_table_md5sum'] == self.ce_row_list[i]['ce_table_md5sum']:
 				return True
 
-		sel = sa.sql.select(select_fields)
-		result = self._storage_controller.run(sel)
 		sel_md5_lst = []
 		lis_md5_lst = []
-		for i in result:
-			sel_md5_lst.append(i['ce_row_md5sum'])
+		sel = sa.sql.select(select_fields)
+		result = self._storage_controller.run(sel)
+		if self._listed_ce_count:
+			for i in result:
+				sel_md5_lst.append(i['ce_row_md5sum'])
 
 		for j in self.ce_row_list:
 			lis_md5_lst.append(j['ce_row_md5sum'])
@@ -378,6 +389,7 @@ class Periodic_Task(object):
 				self._storage_controller.run(de)
 				de = tables.Ce.delete().where(tables.Ce.c.access_instance_id == access_id_del)
 				self._storage_controller.run(de)
+		self._update_ce_total_table_md5sum()
 
 		for i in lis_md5_lst:
 			if i not in sel_md5_lst:
@@ -400,7 +412,7 @@ class Periodic_Task(object):
 																			 work_mode=j['work_mode'],
 																			 pe_id=pe_id)
 							self._storage_controller.run(ins)
-							ins = sq.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=j['ce_row_md5sum'],
+							ins = sa.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=j['ce_row_md5sum'],
 								                                                   ce_table_md5sum=j['ce_table_md5'],
 																				   virtual_network_number=j['virtual_network_number'],
 																				   customer_id=j['customer_id'],
@@ -412,3 +424,27 @@ class Periodic_Task(object):
 																				   password=j['password'],
 																				   work_mode=j['work_mode'],
 																				   pe_code=j['pe_code'])
+							self._storage_controller.run(ins)
+		self._update_ce_total_table_md5sum()
+
+	def _update_pe_total_table_md5sum(self):
+		sel = sa.sql.select([tables.Pe_total.c.pe_row_md5sum])
+		result = self._storage_controller.run(sel)
+		pe_table_md5sum = ''
+		for i in result:
+			pe_table_md5sum += i['pe_row_md5sum']
+		pe_table_md5sum_value = utils.md5sum(pe_table_md5sum)
+		stmt = tables.Pe_total.update().values(pe_table_md5sum=pe_table_md5sum_value)
+		self._storage_controller.run(stmt)
+		self._storage_controller.close()
+
+	def _update_ce_total_table_md5sum(self):
+		sel = sa.sql.select([tables.Ce_total.c.ce_row_md5sum])
+		result = self._storage_controller.run(sel)
+		ce_table_md5sum = ''
+		for i in result:
+			ce_table_md5sum += i['ce_row_md5sum']
+		ce_table_md5sum_value = utils.md5sum(ce_table_md5sum)
+		stmt = tables.Ce_total.update().values(ce_table_md5sum=ce_table_md5sum_value)
+		self._storage_controller.run(stmt)
+		self._storage_controller.close()

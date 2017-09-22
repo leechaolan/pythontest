@@ -23,5 +23,6 @@ class ItemResource(object):
 
 	def on_post(self, req, resp):
 		resp.status = falcon.HTTP_200
-		response_body = self._mansync_controller.sync(self._conf)
+		self._mansync_controller.sync(self._conf)
+		response_body = {'result': 1, 'error_code': 0, 'error_msg': ''}
 		resp.body = utils.to_json(response_body)

@@ -23,13 +23,26 @@ class CfgNotifyController(storage.CfgNotify):
 		t = threading.Timer(default_call_interval, self.looping_call_agent)
 		t.daemon = True
 		t.start()
-		#instance_dict = {}
-		result = self.create_user_to_agent(self.instance_dict)
+		result = self.create_user_to_agent(self._instance_dict)
 
 		if result is 1:
 			t.cancel()
-			self._notify_list.remove(instance_dict['access_instance_id'])
+			self._notify_list.remove(self._instance_dict['access_instance_id'])
 		if self._notify_list is []:
+			self.notify_boss()
+	
+	def looping_call_agent_delete(self):
+		LOG.debug(u'self._notify_list_delete is %s', self._notify_list_delete)
+		default_call_interval = 30
+		t = threading.Timer(default_call_interval, self.looping_call_agent)
+		t.daemon = True
+		t.start()
+		result = self.delete_user_to_agent(self._instance_dict)
+
+		if result is 1:
+			t.cancel()
+			self._notify_list_delete.remove(self._instance_dict['access_instance_id'])
+		if self._notify_list_delete is []:
 			self.notify_boss()
 
 	def get_pe_ip(self, pe_code):
@@ -62,6 +75,23 @@ class CfgNotifyController(storage.CfgNotify):
 	def create_user_to_agent(self, payload):
 		ip = self.get_agent_ip(payload['pe_code'])
 		pe_ip = self.get_pe_ip(payload['pe_code'])
+		payload['method'] = 'create'
+		LOG.debug(u'ip=%s pe_ip=%s', ip, pe_ip)
+
+		if ip and pe_ip:
+			payload['pe_ip'] = pe_ip
+			url = 'http://' + str(ip) + ':' + '9001' + '/users'
+			LOG.debug(u'paylaod: %s - url: %s', payload, url)
+			resp = utils.make_notify(payload, url)
+			return resp['result']
+		else:
+			LOG.error(u'agent ip or pe_ip is none')
+			return ''
+
+	def delete_user_to_agent(self, payload):
+		ip = self.get_agent_ip(payload['pe_code'])
+		pe_ip = self.get_pe_ip(payload['pe_code'])
+		payload['method'] = 'delete'
 		LOG.debug(u'ip=%s pe_ip=%s', ip, pe_ip)
 
 		if ip and pe_ip:
@@ -96,7 +126,7 @@ class CfgNotifyController(storage.CfgNotify):
 				access_instance_dict['work_mode'] = j['work_mode']
 				access_instance_list.append(access_instance_dict)
 				access_instance_id_list.append(j['access_instance_id'])
-		pass
+
 		print access_instance_list
 		print access_instance_id_list
 
@@ -111,7 +141,7 @@ class CfgNotifyController(storage.CfgNotify):
 			if i not in sel_access_list:
 				for j in access_instance_list:
 					if j['access_instance_id'] == i:
-						self.instance_dict = dict(j)
+						self._instance_dict = dict(j)
 						self._notify_list.append(j['access_instance_id'])
 						self.looping_call_agent()
 						sel = sa.sql.select([tables.Pe.c.id], tables.Pe.c.pe_code == j['pe_code'])
@@ -149,15 +179,57 @@ class CfgNotifyController(storage.CfgNotify):
 																				   pe=j['pe_code'])
 
 							self.driver.run(ins)
-							sel = sq.sql.select([tables.Ce_total.c.ce_table_md5sum])
-							result = self.driver.run(sel)
-							ce_table_md5sum = ''
-							for i in result:
-								ce_table_md5sum += i['ce_row_md5sum']
-							ce_table_md5sum_value = utils.md5sum(ce_table_md5sum)
-							stmt = tables.Ce_total.update().values(ce_table_md5sum=ce_table_md5sum_value)
-							self.driver.run(stmt)
+		self.update_ce_total_table_md5sum()
+
+		for i in sel_access_list:
+			if i not in access_instance_id_list:
+				select_field = [tables.Ce.c.virtual_network_number,
+				                tables.Ce.c.access_instance_id,
+				                tables.Ce.c.openvpn_client_ip,
+				                tables.Ce.c.password,
+				                tables.Ce.c.pe_code,
+				                tables.Ce.c.tunnel_type,
+				                tables.Ce.c.username,
+				                tables.Ce.c.work_mode]
+				sel = sq.sql.select(select_field, tables.Ce.c.access_instance_id == i)
+				result = self.driver.run(sel)
+				for j in result:
+					sel_access_ins_dict = {}
+					sel_access_ins_dict.append(j['virtual_network_number'])
+					sel_access_ins_dict.append(j['access_instance_id'])
+					sel_access_ins_dict.append(j['openvpn_client_ip'])
+					sel_access_ins_dict.append(j['password'])
+					sel_access_ins_dict.append(j['pe_code'])
+					sel_access_ins_dict.append(j['tunnel_type'])
+					sel_access_ins_dict.append(j['username'])
+					sel_access_ins_dict.append(j['work_mode'])
+					self._instance_dict_delete = sel_access_ins_dict
+					self._notify_list_delete.append(j['access_instance_id'])
+					self.looping_call_agent_delete()
+					de = tables.Ce_total.delete().where(tables.Ce_total.access_instance_id == j['access_instance_id'])
+					self._storage_controller.run(de)
+					de = tables.Ce.delete().where(tables.Ce.c.access_instance_id == j['access_instance_id'])
+					self._storage_controller.run(e)
+		self.update_ce_total_table_md5sum()
+
+	def _update_pe_total_table_md5sum(self):
+		sel = sq.sql.select([tables.Pe_total.c.pe_row_md5sum])
+		result = self.driver.run(sel)
+		pe_table_md5sum = ''
+		for i in result:
+			pe_table_md5sum += i['pe_row_md5sum']
+		pe_table_md5sum_value = utils.md5sum(pe_table_md5sum)
+		stmt = tables.Pe_total.update().values(pe_table_md5sum=pe_table_md5sum_value)
+		self.driver.run(stmt)
 		self.driver.close()
 
-	def make_user_payload(self, access_instance_id):
-		pass
+	def _update_ce_total_table_md5sum(self):
+		sel = sq.sql.select([tables.Ce_total.c.ce_row_md5sum])
+		result = self.driver.run(sel)
+		ce_table_md5sum = ''
+		for i in result:
+			ce_table_md5sum += i['ce_row_md5sum']
+		ce_table_md5sum_value = utils.md5sum(ce_table_md5sum)
+		stmt = tables.Ce_total.update().values(ce_table_md5sum=ce_table_md5sum_value)
+		self.driver.run(stmt)
+		self.driver.close()
