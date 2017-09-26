@@ -1,4 +1,5 @@
 import time
+import threading
 import socket
 import sqlalchemy as sa
 from sqlalchemy import func
@@ -25,11 +26,13 @@ class Periodic_Task(object):
 	def __init__(self, conf, storage_controller):
 		self._conf = conf
 		self._storage_controller = storage_controller
-		self.pe_list_result = {}
-		self.ce_list_result = {}
+		self._pe_list_result = {}
+		self._ce_list_result = {}
 		self._host_ip_list = []
-		self.pe_row_list = []
-		self.ce_row_list = []
+		self._pe_row_list = []
+		self._ce_row_list = []
+		self._notify_list_create = []
+		self._notify_list_delete = []
 
 	def get_agent_ip(self, pe_code):
 		sel_field = [tables.Pe.c.id, 
@@ -52,20 +55,37 @@ class Periodic_Task(object):
 			pe_ip = i['pe_default_port_ip']
 			return pe_ip
 
-	def make_ce_delete_payload(self, list_dict):
-		pass
+	def looping_call_agent(self, payload, method):
+		default_call_interval = 30
+		args = []
+		args.append(payload)
+		args.append(method)
+		t = threading.Timer(default_call_interval, self.looping_call_agent, args)
+		t.daemon = True
+		t.start()
 
-	def make_ce_create_payload(self):
-		pass
+		result = self.to_agent(payload, method)
+
+		if result is 1:
+			t.cancel()
+			if method is 'create':
+				self._notify_list_create.remove(payload['access_instance_id'])
+			if method is 'delete':
+				self._notify_list_delete.remove(payload['access_instance_id'])
+		if self._notify_list_create is [] or self._notify_list_delete is []:
+			self.notify_boss()
 
 	def to_agent(self, payload, method):
+		print payload
+		print method
 		ip = self.get_agent_ip(payload['pe_code'])
 		pe_ip = self.get_pe_ip(payload['pe_code'])
 		payload['pe_ip'] = pe_ip
 		payload['method'] = method
 		url = 'http://' + str(ip) + ':' + '9001' + '/users'
 		resp = utils.make_notify(payload, url)
-		if resp is not False:
+		print("result: {0}".format(resp))
+		if resp != {}:
 			return resp['result']
 
 	def list_boss_pe_endpointt(self):
@@ -83,7 +103,7 @@ class Periodic_Task(object):
 			raise
 		if resp.status is 200:
 			#print context.decode()
-			self.pe_list_result = context.decode()
+			self._pe_list_result = context.decode()
 		else:
 			LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, resp.reason)
 
@@ -91,8 +111,8 @@ class Periodic_Task(object):
 		# First compare each item count.
 		# If count different chanage it refer to result from BOSS
 		LOG.debug(u'begin contrast between local db and result from invoke BOSS list endpoint')
-		if self.pe_list_result:
-			list_result_decode = jsonutils.loads(self.pe_list_result)
+		if self._pe_list_result:
+			list_result_decode = jsonutils.loads(self._pe_list_result)
 			self._list_result_decode = list_result_decode
 
 			node_count = len(self._list_result_decode['data_list'])
@@ -157,7 +177,7 @@ class Periodic_Task(object):
 			for i in row_lst:
 				i['pe_table_md5sum'] = md5sum_code_total
 	
-			self.pe_row_list = row_lst		
+			self._pe_row_list = row_lst		
 
 	def pe_contrast_to_local_db(self):
 		select_fields = [tables.Pe_total.c.id,
@@ -181,7 +201,7 @@ class Periodic_Task(object):
 		sel = sa.sql.select([func.count()]).select_from(tables.Pe_total)
 		result = self._storage_controller.run(sel)
 		self._selected_pe_count = int(result.fetchone()[0])
-		self._listed_pe_count = len(self.pe_row_list)
+		self._listed_pe_count = len(self._pe_row_list)
 
 		sel = sa.sql.select(select_fields)
 		result = self._storage_controller.run(sel)
@@ -190,7 +210,9 @@ class Periodic_Task(object):
 		#here don't need to consider detail operate because Pe already configed before launch
 		LOG.debug(u'sync data from BOSS and pe count is %d', self._listed_pe_count)
 		for i, v in enumerate(result):
-			if v['pe_table_md5sum'] == self.pe_row_list[i]['pe_table_md5sum']:
+			if v['pe_table_md5sum'] == self._pe_row_list[i]['pe_table_md5sum']:
+				LOG.debug(u'Same table md5hash digest.')
+				LOG.debug(u'Finish sync Pe.')
 				return True
 	
 		sel = sa.sql.select([tables.Node.c.node_id])
@@ -219,7 +241,7 @@ class Periodic_Task(object):
 			for i in result:
 				sel_md5_lst.append(i['pe_row_md5sum'])
 
-		for j in self.pe_row_list:
+		for j in self._pe_row_list:
 			lis_md5_lst.append(j['pe_row_md5sum'])
 		#print sel_md5_lst
 		#print lis_md5_lst
@@ -236,7 +258,7 @@ class Periodic_Task(object):
 
 		for i in lis_md5_lst:
 			if i not in sel_md5_lst:
-				for j in self.pe_row_list:
+				for j in self._pe_row_list:
 					if j['pe_row_md5sum'] == i:
 						sel = sa.sql.select([tables.Host.c.host_id]).where(tables.Host.c.host_code == j['host_code'])
 						result = self._storage_controller.run(sel)
@@ -288,12 +310,12 @@ class Periodic_Task(object):
 		except ValueError as e:
 			LOG.exception(e)
 			
-		self.ce_list_result = result_dict
+		self._ce_list_result = result_dict
 
 	def format_ce_list_result(self):
 		access_instance_list =  []
-		if self.ce_list_result:
-			data_list = self.ce_list_result['data_list']
+		if self._ce_list_result:
+			data_list = self._ce_list_result['data_list']
 			for i in data_list:
 				vnet_list = i['virtual_network_list']
 				for j in vnet_list:
@@ -323,12 +345,12 @@ class Periodic_Task(object):
 						row_md5_value = utils.md5sum(row_md5)
 						access_instance_dict['ce_row_md5sum'] = row_md5_value
 						access_instance_list.append(access_instance_dict)
-			self.ce_row_list = access_instance_list
+			self._ce_row_list = access_instance_list
 			ce_table_md5 = ''
-			for i in self.ce_row_list:
+			for i in self._ce_row_list:
 				ce_table_md5 += i['ce_row_md5sum']
 			ce_table_md5sum = utils.md5sum(ce_table_md5)
-			for i in self.ce_row_list:
+			for i in self._ce_row_list:
 				i['ce_table_md5sum'] = ce_table_md5sum
 
 	def ce_contrast_to_local_db(self):
@@ -349,12 +371,12 @@ class Periodic_Task(object):
 		sel = sa.sql.select([func.count()]).select_from(tables.Ce_total)
 		result = self._storage_controller.run(sel)
 		self._selected_ce_count = int(result.fetchone()[0])
-		self._listed_ce_count = len(self.ce_row_list)
+		self._listed_ce_count = len(self._ce_row_list)
 
 		sel = sa.sql.select(select_fields)
 		result = self._storage_controller.run(sel)
 		for i, v in enumerate(result):
-			if v['ce_table_md5sum'] == self.ce_row_list[i]['ce_table_md5sum']:
+			if v['ce_table_md5sum'] == self._ce_row_list[i]['ce_table_md5sum']:
 				return True
 
 		sel_md5_lst = []
@@ -365,7 +387,7 @@ class Periodic_Task(object):
 			for i in result:
 				sel_md5_lst.append(i['ce_row_md5sum'])
 
-		for j in self.ce_row_list:
+		for j in self._ce_row_list:
 			lis_md5_lst.append(j['ce_row_md5sum'])
 		
 		#print sel_md5_lst
@@ -383,7 +405,8 @@ class Periodic_Task(object):
 				result = self._storage_controller.run(sel)
 				access_id_del = 0
 				for j in result:
-					self.to_agent(dict(j), 'delete')
+					self.looping_call_agent(dict(j), 'delete')
+					self._notify_list_delete.append(j['access_instance_id'])
 					access_id_del = j['access_instance_id']
 				de = tables.Ce_total.delete().where(tables.Ce_total.ce_row_md5sum == i)
 				self._storage_controller.run(de)
@@ -393,14 +416,15 @@ class Periodic_Task(object):
 
 		for i in lis_md5_lst:
 			if i not in sel_md5_lst:
-				for j in self.ce_row_list:
+				for j in self._ce_row_list:
 					if j['ce_row_md5sum'] == i:
-						self.to_agent(dict(j), 'create')
+						self.looping_call_agent(dict(j), 'create')
+						self._notify_list_create.append(j['access_instance_id'])
 						sel = sa.sql.select([tables.Pe.c.id], tables.Pe.c.pe_code == j['pe_code'])
 						result = self._storage_controller.run(sel)
 						if result.rowcount:
 							for k in result:
-								pe_id = k['pe_id']
+								pe_id = k['id']
 							ins = sa.sql.expression.insert(tables.Ce).values(virtual_network_number=j['virtual_network_number'],
 								                                             customer_id=j['customer_id'],
 																			 customer_code=j['customer_code'],
@@ -413,7 +437,7 @@ class Periodic_Task(object):
 																			 pe_id=pe_id)
 							self._storage_controller.run(ins)
 							ins = sa.sql.expression.insert(tables.Ce_total).values(ce_row_md5sum=j['ce_row_md5sum'],
-								                                                   ce_table_md5sum=j['ce_table_md5'],
+								                                                   ce_table_md5sum=j['ce_table_md5sum'],
 																				   virtual_network_number=j['virtual_network_number'],
 																				   customer_id=j['customer_id'],
 																				   customer_code=j['customer_code'],

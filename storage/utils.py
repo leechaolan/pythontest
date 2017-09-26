@@ -53,11 +53,14 @@ def make_notify(req_body_dict, url):
 									 headers={'Context-Type': 'application/x-www-form-urlencoded'},
 									 body=urllib.urlencode(req_body_dict))
 	except httplib2.HttpLib2Error, e:
-		return False
+		return {}
 	if resp.status is not 200:
 		LOG.error(u'POST %s %s HTTP:%s', url, context, resp.status)
+		return {}
+
 	try:
 		list_result = context.decode()
 	except httplib2.FailedToDecompressContent, e:
-		pass
+		return {}
+
 	return list_result

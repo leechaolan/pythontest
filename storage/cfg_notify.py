@@ -17,32 +17,26 @@ class CfgNotifyController(storage.CfgNotify):
 		body = jsonutils.loads(notify_dic)
 		make_notify(body, self._boss_url)
 
-	def looping_call_agent(self):
-		LOG.debug(u'self._notify_list is %s', self._notify_list)
-		default_call_interval = 30
-		t = threading.Timer(default_call_interval, self.looping_call_agent)
-		t.daemon = True
-		t.start()
-		result = self.create_user_to_agent(self._instance_dict)
-
-		if result is 1:
-			t.cancel()
-			self._notify_list.remove(self._instance_dict['access_instance_id'])
-		if self._notify_list is []:
-			self.notify_boss()
-	
-	def looping_call_agent_delete(self):
+	def looping_call_agent(self, payload, method):
+		LOG.debug(u'self._notify_list_create is %s', self._notify_list_create)
 		LOG.debug(u'self._notify_list_delete is %s', self._notify_list_delete)
 		default_call_interval = 30
-		t = threading.Timer(default_call_interval, self.looping_call_agent)
+		args = []
+		args.append(payload)
+		args.append(method)
+		t = threading.Timer(default_call_interval, self.looping_call_agent, args)
 		t.daemon = True
 		t.start()
-		result = self.delete_user_to_agent(self._instance_dict)
+		result = self.to_agent(payload, method)
 
 		if result is 1:
 			t.cancel()
-			self._notify_list_delete.remove(self._instance_dict['access_instance_id'])
-		if self._notify_list_delete is []:
+			if method is 'create':
+				self._notify_list_create.remove(payload['access_instance_id'])
+			if method is 'delete':
+				self._notify_list_delete.remove(payload['access_instance_id'])
+				
+		if self._notify_list_create is [] or self._notify_list_delete is []:
 			self.notify_boss()
 
 	def get_pe_ip(self, pe_code):
@@ -72,32 +66,17 @@ class CfgNotifyController(storage.CfgNotify):
 		else:
 			return ''
 
-	def create_user_to_agent(self, payload):
+	def to_agent(self, payload, method):
 		ip = self.get_agent_ip(payload['pe_code'])
 		pe_ip = self.get_pe_ip(payload['pe_code'])
-		payload['method'] = 'create'
-		LOG.debug(u'ip=%s pe_ip=%s', ip, pe_ip)
+		LOG.debug(u'agent_ip=%s, pe_ip=%s', ip, pe_ip)
+		payload['method'] = method
+		LOG.debug(u'payload=%s, method=%s', payload, method)
 
 		if ip and pe_ip:
 			payload['pe_ip'] = pe_ip
 			url = 'http://' + str(ip) + ':' + '9001' + '/users'
-			LOG.debug(u'paylaod: %s - url: %s', payload, url)
-			resp = utils.make_notify(payload, url)
-			return resp['result']
-		else:
-			LOG.error(u'agent ip or pe_ip is none')
-			return ''
-
-	def delete_user_to_agent(self, payload):
-		ip = self.get_agent_ip(payload['pe_code'])
-		pe_ip = self.get_pe_ip(payload['pe_code'])
-		payload['method'] = 'delete'
-		LOG.debug(u'ip=%s pe_ip=%s', ip, pe_ip)
-
-		if ip and pe_ip:
-			payload['pe_ip'] = pe_ip
-			url = 'http://' + str(ip) + ':' + '9001' + '/users'
-			LOG.debug(u'paylaod: %s - url: %s', payload, url)
+			LOG.debug(u'url=%s', url)
 			resp = utils.make_notify(payload, url)
 			return resp['result']
 		else:
@@ -141,9 +120,8 @@ class CfgNotifyController(storage.CfgNotify):
 			if i not in sel_access_list:
 				for j in access_instance_list:
 					if j['access_instance_id'] == i:
-						self._instance_dict = dict(j)
-						self._notify_list.append(j['access_instance_id'])
-						self.looping_call_agent()
+						self._notify_list_create.append(j['access_instance_id'])
+						self.looping_call_agent(dict(j), 'create')
 						sel = sa.sql.select([tables.Pe.c.id], tables.Pe.c.pe_code == j['pe_code'])
 						result = self.driver.run(sel)
 						pe_id = 0
@@ -203,9 +181,8 @@ class CfgNotifyController(storage.CfgNotify):
 					sel_access_ins_dict.append(j['tunnel_type'])
 					sel_access_ins_dict.append(j['username'])
 					sel_access_ins_dict.append(j['work_mode'])
-					self._instance_dict_delete = sel_access_ins_dict
 					self._notify_list_delete.append(j['access_instance_id'])
-					self.looping_call_agent_delete()
+					self.looping_call_agent_delete(sel_access_ins_dict, 'delete')
 					de = tables.Ce_total.delete().where(tables.Ce_total.access_instance_id == j['access_instance_id'])
 					self._storage_controller.run(de)
 					de = tables.Ce.delete().where(tables.Ce.c.access_instance_id == j['access_instance_id'])
