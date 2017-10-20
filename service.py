@@ -4,7 +4,6 @@ import socket
 import sqlalchemy as sa
 from sqlalchemy import func
 import httplib2
-import urllib
 from oslo_serialization import jsonutils
 from oslo_log import log
 from storage import tables
@@ -21,6 +20,9 @@ class Service(object):
 		if self.conf.periodic_task_interval is None:
 			self.periodic_interval = 60*60*24
 
+#This do a synchronization task. compare md5 checksum between local database and result from BOSS,
+#for each row in table make a md5digest and merge each row md5 again, 
+#if the latter both the same so it is syncchronous
 class Periodic_Task(object):
 
 	def __init__(self, conf, storage_controller):
@@ -43,6 +45,7 @@ class Periodic_Task(object):
 									                                                   tables.Host.c.host_id == tables.Pe.c.host_id))
 		result = self._storage_controller.run(sel)
 		for i in result:
+			print i['host_ip_address']
 			host_ip = i['host_ip_address']
 			return host_ip
 
@@ -82,9 +85,12 @@ class Periodic_Task(object):
 		pe_ip = self.get_pe_ip(payload['pe_code'])
 		payload['pe_ip'] = pe_ip
 		payload['method'] = method
+		LOG.debug(u'To agent(%(agent_ip)s) payload:%(payload)s method:%(method)s', 
+				  {'agent_ip': ip, 'payload': payload, 'method': method})
 		url = 'http://' + str(ip) + ':' + '9001' + '/users'
 		resp = utils.make_notify(payload, url)
 		print("result: {0}".format(resp))
+		LOG.debug(u'Agent response result:%s', resp)
 		if resp != {}:
 			return resp['result']
 
@@ -96,8 +102,7 @@ class Periodic_Task(object):
 		try:
 			resp, context = http.request(self._conf.boss_operate_config_url,
 					                     method="POST",
-										 headers={'Context-Type': 'application/x-www-form-urlencoded'},
-										 body=urllib.urlencode(body_dict))
+			                             body=jsonutils.dumps(body_dict))
 		except (httplib2.HttpLib2Error, socket.error) as ex:
 			LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, context)
 			raise
@@ -108,9 +113,6 @@ class Periodic_Task(object):
 			LOG.error(u'POST %s %s', self._conf.boss_operate_config_url, resp.reason)
 
 	def format_pe_list_result(self):
-		# First compare each item count.
-		# If count different chanage it refer to result from BOSS
-		LOG.debug(u'begin contrast between local db and result from invoke BOSS list endpoint')
 		if self._pe_list_result:
 			list_result_decode = jsonutils.loads(self._pe_list_result)
 			self._list_result_decode = list_result_decode
@@ -123,74 +125,83 @@ class Periodic_Task(object):
 				host_count = len(i['host_list'])
 				host_list = i['host_list']
 				node_code = i['node_code']
-				#sel = sa.sql.select([func.count()]).select_from(tables.Host)
-				#result = self._storage_controller.run(sel)
-				#select_count = int(result.fetchone()[0])
 				for j in host_list:
 					if 'pe_list' in j:
 						pe_list = j['pe_list']
 						pe_count = len(j['pe_list'])
 						for k in pe_list:
+							print k
 							pe_row_dict = {}
 							pe_row_dict['host_code'] = j['host_code']
 							if 'host_type' in j:
 								pe_row_dict['host_type'] = j['host_type']
-							pe_row_dict['host_work_status'] = j['host_work_status']
-							if 'host_ip_address' in j:
-								pe_row_dict['host_ip_address'] = j['host_ip_address']
-								self._host_ip_list.append(j['host_ip_address'])
+							if 'host_ip_address_list' in j:
+								host_ip_list = []
+								host_ip_address_dict = {}
+								for p in j['host_ip_address_list']:
+									host_ip_address_dict['host_ip_address'] = p['host_ip_address']
+									host_ip_address_dict['operator_code'] = p['operator_code']
+									host_ip_list.append(host_ip_address_dict)
+								pe_row_dict['host_ip_address_list'] = j['host_ip_address_list']
+								self._host_ip_list.append(j['host_ip_address_list'])
 							pe_row_dict['node_code'] = i['node_code']
 							#pe_row_dict['node_type'] = i['node_type']
 							pe_row_dict['pe_code'] = k['pe_code']
 							pe_row_dict['pe_type'] = k['pe_type']
-							pe_row_dict['pe_work_status'] = k['pe_work_status']
-							pe_row_dict['pe_default_port_ip'] = k['pe_vm_ip']
 							pe_row_dict['pe_vlan_port_ip'] = k['pe_sdn_ip']
-							pe_row_dict['pe_vpn_server_ip'] = k['pe_access_server_ip']
-							pe_row_dict['pe_vpn_ip_range_start'] = k['pe_access_ip_pool_begin_ip']
-							pe_row_dict['pe_vpn_ip_range_end'] = k['pe_access_ip_pool_end_ip']
-							pe_row_dict['pe_vpn_access_port'] = k['pe_access_port']
-							pe_row_dict['virtual_network_number'] = k['virtual_network_number']
+							pe_row_dict['pe_default_port_ip'] = k['pe_vm_ip']
+							if k['pe_type'] != 'monitor':
+								pe_row_dict['pe_vpn_server_ip'] = k['pe_access_server_ip']
+								pe_row_dict['pe_vpn_ip_range_start'] = k['pe_access_ip_pool_begin_ip']
+								pe_row_dict['pe_vpn_ip_range_end'] = k['pe_access_ip_pool_end_ip']
+								pe_row_dict['pe_vpn_access_port'] = k['pe_access_port']
+								pe_row_dict['virtual_network_number'] = k['virtual_network_number']
 							row_lst.append(pe_row_dict)
 			for i in row_lst:
-				md5str = i['node_code'] +                 \
-				         i ['host_code'] +                 \
-				         i ['host_type'] +                 \
-				         i ['host_work_status'] +          \
-				         i ['host_ip_address'] +           \
-				         i ['pe_code'] +                   \
-				         i ['pe_type'] +                   \
-				         i ['pe_work_status'] +            \
-				         i ['pe_default_port_ip'] +        \
-				         i ['pe_vlan_port_ip'] +           \
-				         i ['pe_vpn_server_ip'] +          \
-				         i ['pe_vpn_ip_range_start'] +     \
-				         i ['pe_vpn_ip_range_end'] +       \
-				         i ['pe_vpn_access_port'] +        \
-						 i ['virtual_network_number']
+				if i['pe_type'] != 'monitor':
+					md5str = i['node_code'] +                 \
+							i ['host_code'] +                 \
+							i ['host_type'] +                 \
+				         	i ['host_ip_address_list'] +           \
+				         	i ['pe_code'] +                   \
+				         	i ['pe_type'] +                   \
+				         	i ['pe_default_port_ip'] +        \
+				         	i ['pe_vpn_server_ip'] +          \
+				         	i ['pe_vpn_ip_range_start'] +     \
+				         	i ['pe_vpn_ip_range_end'] +       \
+				         	i ['pe_vpn_access_port'] +        \
+						 	i ['virtual_network_number']
+				else:
+					md5str = i['node_code'] +                 \
+							i ['host_code'] +                 \
+							i ['host_type'] +                 \
+				         	i ['host_ip_address_list'] +           \
+				         	i ['pe_code'] +                   \
+				         	i ['pe_type'] +                   \
+				         	i ['pe_default_port_ip']
 				md5sum_code = utils.md5sum(md5str)
 				i['pe_row_md5sum'] = md5sum_code
+			#Merge each row to a long string and do md5 checksum. Prestore it and compare later.
 			md5str_total = ''
 			for i in row_lst:
 				md5str_total += i['pe_row_md5sum']
 			md5sum_code_total = utils.md5sum(md5str_total)
 			for i in row_lst:
 				i['pe_table_md5sum'] = md5sum_code_total
-	
-			self._pe_row_list = row_lst		
+			self._pe_row_list = row_lst
 
+	#Through Compare the md5 checksum between local database and result from BOSS to whether to do synchronization.
 	def pe_contrast_to_local_db(self):
 		select_fields = [tables.Pe_total.c.id,
 		                 tables.Pe_total.c.pe_row_md5sum,
 		                 tables.Pe_total.c.pe_table_md5sum,
 		                 tables.Pe_total.c.host_code,
 		                 tables.Pe_total.c.host_type,
-		                 tables.Pe_total.c.host_work_status,
+		                 #tables.Pe_total.c.host_work_status,
 		                 tables.Pe_total.c.host_ip_address,
 		                 tables.Pe_total.c.node_code,
 		                 tables.Pe_total.c.pe_code,
 		                 tables.Pe_total.c.pe_type,
-		                 tables.Pe_total.c.pe_work_status,
 		                 tables.Pe_total.c.pe_default_port_ip,
 		                 tables.Pe_total.c.pe_vlan_port_ip,
 		                 tables.Pe_total.c.pe_vpn_server_ip,
@@ -205,15 +216,13 @@ class Periodic_Task(object):
 
 		sel = sa.sql.select(select_fields)
 		result = self._storage_controller.run(sel)
-		# just compare the 'table md5sum' value.
-		#if it is different that means Pe count is different 
-		#here don't need to consider detail operate because Pe already configed before launch
-		LOG.debug(u'sync data from BOSS and pe count is %d', self._listed_pe_count)
-		for i, v in enumerate(result):
-			if v['pe_table_md5sum'] == self._pe_row_list[i]['pe_table_md5sum']:
-				LOG.debug(u'Same table md5hash digest.')
-				LOG.debug(u'Finish sync Pe.')
-				return True
+		LOG.debug(u'Sync data according to result from BOSS. Pe count is %d', self._listed_pe_count)
+		if self._selected_pe_count is self._listed_pe_count:
+			for i, v in enumerate(result):
+				if v['pe_table_md5sum'] == self._pe_row_list[i]['pe_table_md5sum']:
+					LOG.debug(u'Same table md5hash digest.')
+					LOG.debug(u'Finish sync Pe.')
+					return True
 	
 		sel = sa.sql.select([tables.Node.c.node_id])
 		result = self._storage_controller.run(sel)
@@ -228,7 +237,7 @@ class Periodic_Task(object):
 					for j in i['host_list']:
 						ins = sa.sql.expression.insert(tables.Host).values(node_id=_primary_key,
 								                                           host_type=j['host_type'],
-																		   host_work_status=j['host_work_status'],
+																		   #host_work_status=j['host_work_status'],
 																		   host_code=j['host_code'],
 																		   host_ip_address=j['host_ip_address'])
 						self._storage_controller.run(ins)
@@ -269,7 +278,6 @@ class Periodic_Task(object):
 							ins = sa.sql.expression.insert(tables.Pe).values(host_id=host_id,
 													        pe_code =j['pe_code'],
 															pe_type=j['pe_type'],
-															pe_work_status=j['pe_work_status'],
 															pe_default_port_ip=j['pe_default_port_ip'],
 															pe_vlan_port_ip=j['pe_vlan_port_ip'],
 															pe_vpn_server_ip=j['pe_vpn_server_ip'],
@@ -282,12 +290,11 @@ class Periodic_Task(object):
 									                              pe_table_md5sum=j['pe_table_md5sum'],
 																  host_code=j['host_code'],
 																  host_type=j['host_type'],
-																  host_work_status=j['host_work_status'],
+																  #host_work_status=j['host_work_status'],
 																  host_ip_address=j['host_ip_address'],
 																  node_code=j['node_code'],
 																  pe_code=j['pe_code'],
 																  pe_type=j['pe_type'],
-																  pe_work_status=j['pe_work_status'],
 																  pe_default_port_ip=j['pe_default_port_ip'],
 																  pe_vlan_port_ip=j['pe_vlan_port_ip'],
 																  pe_vpn_server_ip=j['pe_vpn_server_ip'],
@@ -375,10 +382,16 @@ class Periodic_Task(object):
 
 		sel = sa.sql.select(select_fields)
 		result = self._storage_controller.run(sel)
-		for i, v in enumerate(result):
-			if v['ce_table_md5sum'] == self._ce_row_list[i]['ce_table_md5sum']:
-				return True
+		
+		if self._selected_ce_count is self._listed_ce_count:
+			for i, v in enumerate(result):
+				LOG.debug(u'invoke result:%s', v['ce_table_md5sum'])
+				LOG.debug(u'select result:%s', self._ce_row_list[i]['ce_table_md5sum'])
+				if v['ce_table_md5sum'] == self._ce_row_list[i]['ce_table_md5sum']:
+					LOG.debug(u'Same select result. Ce Synchronization finished.')
+					return True
 
+		LOG.debug(u'Any of invoke results is different from select results. Begin compare each item.')
 		sel_md5_lst = []
 		lis_md5_lst = []
 		sel = sa.sql.select(select_fields)
@@ -408,7 +421,7 @@ class Periodic_Task(object):
 					self.looping_call_agent(dict(j), 'delete')
 					self._notify_list_delete.append(j['access_instance_id'])
 					access_id_del = j['access_instance_id']
-				de = tables.Ce_total.delete().where(tables.Ce_total.ce_row_md5sum == i)
+				de = tables.Ce_total.delete().where(tables.Ce_total.c.ce_row_md5sum == i)
 				self._storage_controller.run(de)
 				de = tables.Ce.delete().where(tables.Ce.c.access_instance_id == access_id_del)
 				self._storage_controller.run(de)
@@ -420,6 +433,7 @@ class Periodic_Task(object):
 					if j['ce_row_md5sum'] == i:
 						self.looping_call_agent(dict(j), 'create')
 						self._notify_list_create.append(j['access_instance_id'])
+						print j['pe_code']
 						sel = sa.sql.select([tables.Pe.c.id], tables.Pe.c.pe_code == j['pe_code'])
 						result = self._storage_controller.run(sel)
 						if result.rowcount:

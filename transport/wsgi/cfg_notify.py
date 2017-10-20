@@ -28,7 +28,7 @@ class ItemResource(object):
 		resp_for_list, context = http.request(self._conf.boss_business_config_url,
 				                              method="POST",
 											  headers={'Context-Type': 'application/x-www-form-urlencoded'},
-											  body=urllib.urlencode(body_dict))
+											  body=jsonutils.dumps(body_dict))
 		list_result = context.decode()
 		result_dict = jsonutils.loads(list_result)
 		notify_boss_url = self._conf.boss_deploy_url

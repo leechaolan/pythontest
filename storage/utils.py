@@ -51,7 +51,7 @@ def make_notify(req_body_dict, url):
 		resp, context = http.request(url,
 				                     method="POST",
 									 headers={'Context-Type': 'application/x-www-form-urlencoded'},
-									 body=urllib.urlencode(req_body_dict))
+									 body=jsonutils.dumps(req_body_dict))
 	except httplib2.HttpLib2Error, e:
 		return {}
 	if resp.status is not 200:

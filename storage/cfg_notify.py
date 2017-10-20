@@ -15,6 +15,8 @@ class CfgNotifyController(storage.CfgNotify):
 		notify_id = time.time()
 		notify_dic = {'query_id': notify_id}
 		body = jsonutils.loads(notify_dic)
+		LOG.debug(u'Notify BOSS that config is done. body:%(body)s boss_url:%(boss_url)',
+				  {'body': body, 'boss_url': self._boss_url})
 		make_notify(body, self._boss_url)
 
 	def looping_call_agent(self, payload, method):
