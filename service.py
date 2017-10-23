@@ -36,7 +36,7 @@ class Periodic_Task(object):
 		self._notify_list_create = []
 		self._notify_list_delete = []
 
-	def get_agent_ip(self, pe_code):
+	def _get_agent_ip(self, pe_code):
 		sel_field = [tables.Pe.c.id, 
 		             tables.Pe.c.host_id,
 	                 tables.Host.c.host_ip_address]
@@ -46,10 +46,12 @@ class Periodic_Task(object):
 		result = self._storage_controller.run(sel)
 		for i in result:
 			print i['host_ip_address']
-			host_ip = i['host_ip_address']
+			for j in i:
+				host_ip = j['host_ip_address']
+				#host_ip = i['host_ip_address']
 			return host_ip
 
-	def get_pe_ip(self, pe_code):
+	def _get_pe_ip(self, pe_code):
 		sel_field = [tables.Pe.c.pe_default_port_ip]
 		sel = sa.sql.select(sel_field, tables.Pe.c.pe_code == pe_code)
 		result = self._storage_controller.run(sel)
@@ -57,6 +59,14 @@ class Periodic_Task(object):
 		for i in result:
 			pe_ip = i['pe_default_port_ip']
 			return pe_ip
+
+	def _get_vlan_port_ip(self, pe_code):
+		sel_field = [tables.Pe.c.pe_vlan_port_ip]
+		sel = sa.sql.select(sel_field, tables.Pe.c.pe_code == pe_code)
+		result = self._storage_controller.run(sel)
+		for i in result:
+			pe_vlan_port_ip = i['pe_vlan_port_ip']
+			return pe_vlan_port_ip
 
 	def looping_call_agent(self, payload, method):
 		default_call_interval = 30
@@ -81,10 +91,12 @@ class Periodic_Task(object):
 	def to_agent(self, payload, method):
 		print payload
 		print method
-		ip = self.get_agent_ip(payload['pe_code'])
-		pe_ip = self.get_pe_ip(payload['pe_code'])
+		ip = self._get_agent_ip(payload['pe_code'])
+		pe_ip = self._get_pe_ip(payload['pe_code'])
 		payload['pe_ip'] = pe_ip
 		payload['method'] = method
+		pe_vlan_port_ip = self._get_vlan_port_ip(payload['pe_code'])
+		payload['pe_vlan_port_ip'] = pe_vlan_port_ip
 		LOG.debug(u'To agent(%(agent_ip)s) payload:%(payload)s method:%(method)s', 
 				  {'agent_ip': ip, 'payload': payload, 'method': method})
 		url = 'http://' + str(ip) + ':' + '9001' + '/users'
@@ -130,7 +142,6 @@ class Periodic_Task(object):
 						pe_list = j['pe_list']
 						pe_count = len(j['pe_list'])
 						for k in pe_list:
-							print k
 							pe_row_dict = {}
 							pe_row_dict['host_code'] = j['host_code']
 							if 'host_type' in j:
@@ -142,8 +153,10 @@ class Periodic_Task(object):
 									host_ip_address_dict['host_ip_address'] = p['host_ip_address']
 									host_ip_address_dict['operator_code'] = p['operator_code']
 									host_ip_list.append(host_ip_address_dict)
-								pe_row_dict['host_ip_address_list'] = j['host_ip_address_list']
-								self._host_ip_list.append(j['host_ip_address_list'])
+								#pe_row_dict['host_ip_address_list'] = j['host_ip_address_list']
+								pe_row_dict['host_ip_address_list'] = host_ip_list
+								#self._host_ip_list.append(j['host_ip_address_list'])
+								self._host_ip_list.append(host_ip_list)
 							pe_row_dict['node_code'] = i['node_code']
 							#pe_row_dict['node_type'] = i['node_type']
 							pe_row_dict['pe_code'] = k['pe_code']
@@ -160,25 +173,26 @@ class Periodic_Task(object):
 			for i in row_lst:
 				if i['pe_type'] != 'monitor':
 					md5str = i['node_code'] +                 \
-							i ['host_code'] +                 \
-							i ['host_type'] +                 \
-				         	i ['host_ip_address_list'] +           \
-				         	i ['pe_code'] +                   \
-				         	i ['pe_type'] +                   \
-				         	i ['pe_default_port_ip'] +        \
-				         	i ['pe_vpn_server_ip'] +          \
-				         	i ['pe_vpn_ip_range_start'] +     \
-				         	i ['pe_vpn_ip_range_end'] +       \
-				         	i ['pe_vpn_access_port'] +        \
-						 	i ['virtual_network_number']
+							 i['host_code'] +                 \
+							 i['host_type'] +                 \
+				         	 i['pe_code'] +                   \
+				         	 i['pe_type'] +                   \
+				         	 i['pe_default_port_ip'] +        \
+				         	 i['pe_vpn_server_ip'] +          \
+				         	 i['pe_vpn_ip_range_start'] +     \
+				         	 i['pe_vpn_ip_range_end'] +       \
+				         	 i['pe_vpn_access_port'] +        \
+						 	 i['virtual_network_number']
 				else:
 					md5str = i['node_code'] +                 \
-							i ['host_code'] +                 \
-							i ['host_type'] +                 \
-				         	i ['host_ip_address_list'] +           \
-				         	i ['pe_code'] +                   \
-				         	i ['pe_type'] +                   \
-				         	i ['pe_default_port_ip']
+							 i['host_code'] +                 \
+							 i['host_type'] +                 \
+				         	 i['pe_code'] +                   \
+							 i['pe_type'] +                   \
+							 i['pe_default_port_ip']
+				for j in i['host_ip_address_list']:
+					md5str += j['host_ip_address']
+					md5str += j['operator_code']
 				md5sum_code = utils.md5sum(md5str)
 				i['pe_row_md5sum'] = md5sum_code
 			#Merge each row to a long string and do md5 checksum. Prestore it and compare later.
@@ -239,7 +253,7 @@ class Periodic_Task(object):
 								                                           host_type=j['host_type'],
 																		   #host_work_status=j['host_work_status'],
 																		   host_code=j['host_code'],
-																		   host_ip_address=j['host_ip_address'])
+																		   host_ip_address=j['host_ip_address_list'])
 						self._storage_controller.run(ins)
 
 		sel_md5_lst = []
@@ -291,7 +305,7 @@ class Periodic_Task(object):
 																  host_code=j['host_code'],
 																  host_type=j['host_type'],
 																  #host_work_status=j['host_work_status'],
-																  host_ip_address=j['host_ip_address'],
+																  host_ip_address=j['host_ip_address_list'],
 																  node_code=j['node_code'],
 																  pe_code=j['pe_code'],
 																  pe_type=j['pe_type'],
@@ -334,7 +348,7 @@ class Periodic_Task(object):
 						access_instance_dict['customer_code'] = i['customer_code']
 						access_instance_dict['access_instance_id'] = k['access_instance_id']
 						access_instance_dict['tunnel_type'] = k['tunnel_type']
-						access_instance_dict['vpn_cli_ip'] = k['openvpn_client_ip']
+						access_instance_dict['vpn_cli_ip'] = k['client_ip']
 						access_instance_dict['username'] = k['username']
 						access_instance_dict['password'] = k['password']
 						access_instance_dict['work_mode'] = k['work_mode']

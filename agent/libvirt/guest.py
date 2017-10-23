@@ -3,7 +3,7 @@ from oslo_log import log
 
 LOG = log.getLogger(__name__)
 
-def start_domain(self, domain_name):
+def start_domain(domain_name):
 	conn = libvirt.open('qemu:///system')
 	if conn == None:
 		LOG.error(u'Failed to open connection to qemu:///system')
@@ -17,7 +17,7 @@ def start_domain(self, domain_name):
 	
 	flag = dom.isActive()
 	if flag == True:
-		LOG.debug(u'domain %s is running', domName)
+		LOG.debug(u'domain %s is already running', domName)
 	else:
 		dom.create()
 			

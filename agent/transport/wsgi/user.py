@@ -27,8 +27,17 @@ class ItemResource(object):
 		password = data['password']
 		userip = data['openvpn_client_ip']
 		pe_ip = data['pe_ip']
+		hostname = data['hostname']
+		method = data['method']
+		virtual_network_number = data['virtual_network_number']
 		result = guest.start_domain(domname)
-		utils.add_user(username, password, userip, pe_ip)
+		configure_vlan(virtual_network_number, data['pe_vlan_port_ip'])
+
+		if method is 'create':
+			utils.add_user(username, password, userip, host_name)
+		else if method is 'delete':
+			utils.delete_user(username, userip, hostname)
+
 		resp.status = falcon.HTTP_200
 		if result is False:
 			resp.body = '{"result": 0}'
