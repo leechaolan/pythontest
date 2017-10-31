@@ -22,22 +22,20 @@ class CfgNotifyController(storage.CfgNotify):
 	def looping_call_agent(self, payload, method):
 		LOG.debug(u'self._notify_list_create is %s', self._notify_list_create)
 		LOG.debug(u'self._notify_list_delete is %s', self._notify_list_delete)
-		default_call_interval = 30
+		result = self.to_agent(payload, method)
+		default_call_interval = 20
 		args = []
 		args.append(payload)
 		args.append(method)
 		t = threading.Timer(default_call_interval, self.looping_call_agent, args)
 		t.daemon = True
 		t.start()
-		result = self.to_agent(payload, method)
-
 		if result is 1:
 			t.cancel()
 			if method is 'create':
 				self._notify_list_create.remove(payload['access_instance_id'])
 			if method is 'delete':
 				self._notify_list_delete.remove(payload['access_instance_id'])
-				
 		if self._notify_list_create is [] or self._notify_list_delete is []:
 			self.notify_boss()
 
@@ -54,26 +52,36 @@ class CfgNotifyController(storage.CfgNotify):
 			return ''
 
 	def get_agent_ip(self, pe_code):
-		sel_field = [tables.Ce.c.pe_id, 
-		             tables.Pe.c.host_id,
-	                 tables.Host.c.host_ip_address]
-		sel = sa.sql.select(sel_field, 
-				            tables.Pe.c.pe_code == pe_code).select_from(tables.Ce.join(tables.Pe, 
-									                                                   tables.Ce.c.pe_id == tables.Pe.c.id))
-		result = self.driver.run(sel)
-		if result.rowcount:
-			for i in result:
-				host_ip = i['host_ip_address']
-			return host_ip
-		else:
-			return ''
+		sel_field = [tables.Host.c.host_ip_address,
+		             tables.Pe.c.id,
+		             tables.Pe.c.host_id]
+		LOG.debug(u'Get pe_code:%(pe_code)s', {'pe_code':pe_code})
+		sel = sa.sql.select([tables.Host.c.host_ip_address], 
+				            tables.Pe.c.pe_code == pe_code).select_from(tables.Pe.join(tables.Host,
+									                                                   tables.Host.c.host_id == tables.Pe.c.host_id))
+		result = self._storage_controller.run(sel)
+		for i in result:
+			iplist = jsonutils.loads(i[0])
+			for j in iplist:
+				return j['host_ip_address']
+
+	def _get_vlan_port_ip(self, pe_code):
+		sel_field = [tables.Pe.c.pe_vlan_port_ip]
+		sel = sa.sql.select(sel_field, tables.Pe.c.pe_code == pe_code)
+		result = self._storage_controller.run(sel)
+		for i in result:
+			pe_vlan_port_ip = i['pe_vlan_port_ip']
+			return pe_vlan_port_ip
 
 	def to_agent(self, payload, method):
 		ip = self.get_agent_ip(payload['pe_code'])
 		pe_ip = self.get_pe_ip(payload['pe_code'])
+		pe_vlan_port_ip = self._get_vlan_port_ip(payload['pe_code'])
+		payload['pe_vlan_port_ip'] = pe_vlan_port_ip
 		LOG.debug(u'agent_ip=%s, pe_ip=%s', ip, pe_ip)
 		payload['method'] = method
 		LOG.debug(u'payload=%s, method=%s', payload, method)
+		LOG.debug(u'Get agent ip:%s, pe_ip:%s', ip, pe_ip) 
 
 		if ip and pe_ip:
 			payload['pe_ip'] = pe_ip
@@ -82,7 +90,6 @@ class CfgNotifyController(storage.CfgNotify):
 			resp = utils.make_notify(payload, url)
 			return resp['result']
 		else:
-			LOG.error(u'agent ip or pe_ip is none')
 			return ''
 
 	def _list(self, result_dict, boss_url, project_id=None):

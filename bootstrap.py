@@ -19,9 +19,9 @@ class Bootstrap(object):
 		self.driver_conf = self.conf[configs._DRIVER_GROUP]
 		self._storage = self.storage()
 
-	def api(self):
-		LOG.debug(u'Loading API handler')
-		return handler.Handler(self._storage)
+	#def api(self):
+	#	LOG.debug(u'Loading API handler')
+	#	return handler.Handler(self._storage)
 
 	def storage(self):
 		LOG.debug(u'Loading storage driver')

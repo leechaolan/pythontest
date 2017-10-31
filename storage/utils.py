@@ -43,17 +43,29 @@ def md5sum(code_str):
 	return hashmd5.hexdigest()
 
 def make_notify(req_body_dict, url):
-	#set request timeout=15 to avoid block.
-	http = httplib2.Http(timeout=15)
+	http = httplib2.Http(timeout=10)
+
 	#http.force_exception_to_status_code = True
-	timestamp = int(time.time())
 	try:
 		resp, context = http.request(url,
 				                     method="POST",
 									 headers={'Context-Type': 'application/x-www-form-urlencoded'},
 									 body=jsonutils.dumps(req_body_dict))
-	except httplib2.HttpLib2Error, e:
+	except httplib2.HTTPConnectionWithTimeout:
+		LOG.error(u'Connect to %(url)s timeout.', 
+				  {'url': url})
+		print(u'Connect to %(url)s timeout.', 
+				  {'url': url})
 		return {}
+	except socket.timeout:
+		LOG.error(u'Connect to %(url)s TIMEOUT',
+				  {'url': url})
+		print(u'Connect to %(url)s TIMEOUT',
+				  {'url': url})
+		return {}
+	except httplib2.ResponseNotReady:
+		LOG.error(u'Response not ready. Retry later.')
+		return {)
 	if resp.status is not 200:
 		LOG.error(u'POST %s %s HTTP:%s', url, context, resp.status)
 		return {}
