@@ -476,8 +476,7 @@ class Periodic_Task(object):
 						LOG.debug(u'Looping call agent. access_instance_id:%d', j['access_instance_id'])
 						self.looping_call_agent(dict(j), 'create')
 						self._notify_list_create.append(j['access_instance_id'])
-						LOG.debug(u'Get pe_code=%(pe_code)d',
-								  {'pe_code': j['pe_code']})
+						LOG.debug(u'Get pe_code=%d', j['pe_code']
 						sel = sa.sql.select([tables.Pe.c.id], tables.Pe.c.pe_code == j['pe_code'])
 						result = self._storage_controller.run(sel)
 						if result.rowcount:

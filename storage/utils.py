@@ -1,5 +1,6 @@
 import time
 import httplib2
+import httplib
 import urllib
 import socket
 import json
@@ -43,7 +44,7 @@ def md5sum(code_str):
 	return hashmd5.hexdigest()
 
 def make_notify(req_body_dict, url):
-	http = httplib2.Http(timeout=10)
+	http = httplib2.Http(".cache", timeout=10)
 
 	#http.force_exception_to_status_code = True
 	try:
@@ -63,9 +64,9 @@ def make_notify(req_body_dict, url):
 		print(u'Connect to %(url)s TIMEOUT',
 				  {'url': url})
 		return {}
-	except httplib2.ResponseNotReady:
+	except httplib.ResponseNotReady:
 		LOG.error(u'Response not ready. Retry later.')
-		return {)
+		return {}
 	if resp.status is not 200:
 		LOG.error(u'POST %s %s HTTP:%s', url, context, resp.status)
 		return {}
